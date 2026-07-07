@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2D Web Fight Game — 온라인 대전</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #12141f;
+    color: #f0f0f0;
+    font-family: Consolas, "Malgun Gothic", monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    justify-content: center;
+    gap: 12px;
+  }
+  h1 { font-size: 22px; letter-spacing: 2px; }
+  #wrap { position: relative; width: min(960px, 96vw); }
+  canvas {
+    width: 100%;
+    display: block;
+    border: 2px solid #333;
+    border-radius: 8px;
+    background: #1a1c2e;
+  }
+  /* 게임 위 오버레이 (로비/대기/오류) */
+  #overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    background: rgba(10, 10, 18, 0.88);
+    border-radius: 8px;
+    text-align: center;
+    padding: 20px;
+  }
+  #overlay.hidden { display: none; }
+  button {
+    font: bold 18px Consolas, monospace;
+    padding: 12px 28px;
+    border: 0;
+    border-radius: 8px;
+    background: #4696f0;
+    color: #fff;
+    cursor: pointer;
+  }
+  button:hover { background: #5aa4f5; }
+  input {
+    font: bold 18px Consolas, monospace;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #555;
+    background: #222;
+    color: #fff;
+    text-transform: uppercase;
+    width: 120px;
+    text-align: center;
+  }
+  #share {
+    font-size: 14px;
+    background: #222;
+    padding: 8px 12px;
+    border-radius: 6px;
+    word-break: break-all;
+    max-width: 90%;
+  }
+  #status { font-size: 16px; color: #aac; }
+  #help { font-size: 13px; color: #778; line-height: 1.7; }
+  .row { display: flex; gap: 8px; align-items: center; }
+</style>
+</head>
+<body>
+<h1>2D WEB FIGHT — 온라인 대전</h1>
+<div id="wrap">
+  <canvas id="game" width="960" height="540"></canvas>
+  <div id="overlay">
+    <div id="status">서버에 연결하는 중...</div>
+    <div id="lobby" style="display:none">
+      <div style="display:flex; flex-direction:column; gap:14px; align-items:center">
+        <button id="btn-create">방 만들기</button>
+        <div class="row">
+          <input id="room-input" maxlength="4" placeholder="코드">
+          <button id="btn-join">참가</button>
+        </div>
+      </div>
+    </div>
+    <div id="share" style="display:none"></div>
+    <button id="btn-copy" style="display:none">링크 복사</button>
+  </div>
+</div>
+<div id="help">
+  이동 A/D 또는 ←→ · 점프 W/↑ · 공격 F/. · 방어 G//<br>
+  커맨드: 앞앞+공격 = 대시 펀치 · ↓앞+공격 = 어퍼컷 · 매치 종료 후 R = 재시작
+</div>
+<script src="config.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

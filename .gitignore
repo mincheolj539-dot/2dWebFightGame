@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Pygbag web build 산출물
+build/
+*.apk
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
