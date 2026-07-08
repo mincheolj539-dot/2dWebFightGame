@@ -15,7 +15,9 @@ const COLORS = {
   p2: "rgb(240,90,90)", p2Accent: "rgb(255,160,160)",
   healthGood: "rgb(80,210,110)", healthLow: "rgb(230,80,80)",
   attack: "rgb(255,220,120)", block: "rgb(120,220,255)",
+  spark: "rgb(255,240,190)", hurtRay: "255,235,150",
 };
+const HIT_STUN = 14, SHAKE_MAG = 9, SHAKE_SPECIAL = 14;  // settings.py와 동기화
 
 // ---- 키 → 액션 매핑 (혼자 플레이하므로 WASD와 방향키 둘 다 자신에게 매핑) ----
 const KEYMAP = {
@@ -155,7 +157,26 @@ function roundRect(x, y, w, h, r) {
   ctx.roundRect(x, y, w, h, r);
 }
 
+function drawHurtRays(f) {
+  // 피격자 위에서 아래로 내리쬐는 반투명 광선 3줄
+  const alpha = 0.6 * Math.min(1, f.hurt / HIT_STUN);
+  const cx = f.x + FIGHTER_W / 2;
+  const top = Math.max(0, f.y - 120);
+  ctx.fillStyle = "rgba(" + COLORS.hurtRay + "," + alpha + ")";
+  for (const off of [-18, 0, 18]) {
+    ctx.beginPath();
+    ctx.moveTo(cx + off - 3, top);
+    ctx.lineTo(cx + off + 3, top);
+    ctx.lineTo(cx + off + 12, f.y + 20);
+    ctx.lineTo(cx + off - 12, f.y + 20);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
 function drawFighter(f, color, accent) {
+  // 피격 시 내리쬐는 광선 (몸통보다 먼저 그려 뒤에 깔리게)
+  if (f.hurt > 0) drawHurtRays(f);
   // 몸통
   ctx.fillStyle = f.flash ? COLORS.white : color;
   roundRect(f.x, f.y, FIGHTER_W, FIGHTER_H, 8);
@@ -164,6 +185,13 @@ function drawFighter(f, color, accent) {
   ctx.lineWidth = 3;
   roundRect(f.x, f.y, FIGHTER_W, FIGHTER_H, 8);
   ctx.stroke();
+  // 피격 중 밝은 외곽 글로우
+  if (f.hurt > 0) {
+    ctx.strokeStyle = COLORS.spark;
+    ctx.lineWidth = 3;
+    roundRect(f.x - 3, f.y - 3, FIGHTER_W + 6, FIGHTER_H + 6, 10);
+    ctx.stroke();
+  }
   // 눈
   ctx.fillStyle = COLORS.black;
   ctx.beginPath();
@@ -212,8 +240,7 @@ function drawCenterText(title, subtitle) {
   }
 }
 
-function draw() {
-  requestAnimationFrame(draw);
+function drawWorld() {
   // 배경 + 바닥
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, W, H);
@@ -224,13 +251,57 @@ function draw() {
   ctx.beginPath();
   ctx.moveTo(0, GROUND_Y); ctx.lineTo(W, GROUND_Y);
   ctx.stroke();
+}
+
+function drawEffects(effects) {
+  // 임팩트 스파크: 방사형 선 + 중심 원 (수명에 따라 커지며 사라짐)
+  for (const e of effects) {
+    const grow = 1 - e.t;
+    const n = e.big ? 10 : 7;
+    const base = e.big ? 34 : 22;
+    const length = base * (0.4 + grow);
+    const inner = base * 0.3 * (0.4 + grow);
+    ctx.strokeStyle = COLORS.spark;
+    ctx.lineWidth = e.big ? 4 : 3;
+    for (let i = 0; i < n; i++) {
+      const ang = (2 * Math.PI * i / n) + grow;
+      ctx.beginPath();
+      ctx.moveTo(e.x + Math.cos(ang) * inner, e.y + Math.sin(ang) * inner);
+      ctx.lineTo(e.x + Math.cos(ang) * length, e.y + Math.sin(ang) * length);
+      ctx.stroke();
+    }
+    const r = (e.big ? 10 : 7) * (0.5 + e.t);
+    ctx.fillStyle = COLORS.white;
+    ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = COLORS.spark; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI * 2); ctx.stroke();
+  }
+}
+
+function draw() {
+  requestAnimationFrame(draw);
 
   const st = lastState;
-  if (!st) return;
+  if (!st) { drawWorld(); return; }
+
+  // 화면 흔들림: 월드(배경+파이터+스파크)만 흔들고 HUD는 고정
+  ctx.fillStyle = COLORS.black;
+  ctx.fillRect(0, 0, W, H);
+  let dx = 0, dy = 0;
+  if (st.shake > 0) {
+    const mag = SHAKE_MAG * Math.min(1, st.shake / SHAKE_SPECIAL);
+    dx = (Math.random() * 2 - 1) * mag;
+    dy = (Math.random() * 2 - 1) * mag;
+  }
+  ctx.save();
+  ctx.translate(dx, dy);
+  drawWorld();
 
   const [f1, f2] = st.fighters;
   drawFighter(f1, COLORS.p1, COLORS.p1Accent);
   drawFighter(f2, COLORS.p2, COLORS.p2Accent);
+  drawEffects(st.effects || []);
+  ctx.restore();
 
   // HUD
   drawHealthBar(f1.health, 30, true);

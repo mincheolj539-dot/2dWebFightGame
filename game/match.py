@@ -34,6 +34,8 @@ class Match:
         self.match_over = False
         self.match_winner = None
         self.popup = None                 # (텍스트, 남은 프레임) - 특수기 명중 표시
+        self.effects = []                 # 임팩트 스파크: [{x,y,life,max,big}]
+        self.shake = 0                    # 화면 흔들림 남은 프레임
         self.start_round()
 
     def start_round(self):
@@ -62,6 +64,14 @@ class Match:
         if self.popup:
             text, remain = self.popup
             self.popup = (text, remain - 1) if remain > 1 else None
+
+        # 이펙트/흔들림 수명 감소 (라운드 종료·매치 종료 중에도 잔상은 사라지게)
+        if self.shake > 0:
+            self.shake -= 1
+        if self.effects:
+            for e in self.effects:
+                e["life"] -= 1
+            self.effects = [e for e in self.effects if e["life"] > 0]
 
         if self.match_over:
             return
@@ -119,9 +129,23 @@ class Match:
             attacker.has_hit = True
             direction = 1 if defender.center_x >= attacker.center_x else -1
             move = attacker.move
-            defender.take_hit(move["damage"], direction, move["launch"])
-            if move is not s.NORMAL_MOVE:
+            defender.take_hit(move["damage"], direction, move["launch"], move.get("stun"))
+            big = move is not s.NORMAL_MOVE
+            # 임팩트 지점: 피격자의 맞은 쪽 옆면, 몸통 중단
+            impact_x = defender.x if direction == 1 else defender.x + s.FIGHTER_W
+            impact_y = defender.y + s.FIGHTER_H * 0.4
+            self._spawn_spark(impact_x, impact_y, big)
+            self.shake = max(self.shake, s.SHAKE_SPECIAL if big else s.SHAKE_NORMAL)
+            if big:
                 self.popup = (f"{attacker.name} {move['name']}!", s.FPS)
+
+    def _spawn_spark(self, x, y, big):
+        self.effects.append({
+            "x": int(x), "y": int(y),
+            "life": s.SPARK_LIFE_BIG if big else s.SPARK_LIFE,
+            "max": s.SPARK_LIFE_BIG if big else s.SPARK_LIFE,
+            "big": big,
+        })
 
     def _finish_round(self):
         self.round_over = True
@@ -164,4 +188,9 @@ class Match:
             "match_over": self.match_over,
             "match_winner": self.match_winner,
             "popup": self.popup[0] if self.popup else None,
+            "effects": [
+                {"x": e["x"], "y": e["y"], "t": e["life"] / e["max"], "big": e["big"]}
+                for e in self.effects
+            ],
+            "shake": self.shake,
         }

@@ -51,7 +51,8 @@ from game.game import Game
 
 - **`game/game.py` + `main.py`** — 데스크톱 클라이언트(렌더링 + 키 변환 + async 루프). `await asyncio.sleep(0)` 는 Pygbag 호환 잔재이자 관례로 유지.
 
-- **`docs/`** — GitHub Pages 용 정적 클라이언트. `game.js` 상단 상수(캔버스 크기·색상)만 `settings.py` 와 수동 동기화 — 색상/크기를 바꾸면 양쪽 다 수정할 것.
+- **`docs/`** — GitHub Pages 용 정적 클라이언트. `game.js` 상단 상수(캔버스 크기·색상·`HIT_STUN`/`SHAKE_*`)만 `settings.py` 와 수동 동기화 — 값을 바꾸면 양쪽 다 수정할 것. `index.html` 의 `?v=N` 캐시버스터는 `game.js`/`config.js` 를 수정할 때마다 숫자를 올려 플레이어의 브라우저가 옛 JS를 캐시하지 않게 한다.
+  - 히트 이펙트(임팩트 스파크·화면 흔들림·피격 광선)는 `Match` 가 `state()`(effects/shake) 와 fighter의 `hurt` 로 데이터를 내려주고, `game.py`/`game.js` 두 렌더러가 동일하게 그린다. 흔들림은 월드(배경+파이터+스파크)에만 적용하고 HUD/오버레이는 고정.
 
 - **`game/settings.py`** — **모든 밸런스·색상·물리 상수의 단일 출처**. 기술 정의(`NORMAL_MOVE`, `SPECIAL_MOVES` — damage/range/duration/active/cooldown/lunge/launch)를 포함. 새 특수기 추가 = `SPECIAL_MOVES` 에 dict 하나 추가로 끝나야 정상 (서버·데스크톱 모두 자동 반영, JS 수정 불필요).
 

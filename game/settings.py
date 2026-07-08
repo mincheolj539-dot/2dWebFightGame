@@ -47,6 +47,7 @@ NORMAL_MOVE = {
     "cooldown": ATTACK_COOLDOWN,
     "lunge": 0,                 # 시전 시 전진 속도
     "launch": 0,                # 명중 시 상대를 띄우는 수직 속도 (음수 = 위)
+    "stun": HIT_STUN,           # 명중 시 피격자 경직 프레임
 }
 
 # 특수기 (Special moves) - seq는 공격 키 직전까지의 방향 입력 (facing 기준 상대 방향)
@@ -61,9 +62,10 @@ SPECIAL_MOVES = [
         "cooldown": 30,
         "lunge": 10,
         "launch": 0,
+        "stun": HIT_STUN,
     },
     {
-        "name": "UPPERCUT",     # ↓→ + 공격: 어퍼컷 (상대를 띄움)
+        "name": "UPPERCUT",     # ↓→ + 공격: 어퍼컷 (상대를 띄움 + 0.5초 스턴)
         "seq": ("down", "forward"),
         "damage": 14,
         "range": 60,
@@ -72,8 +74,16 @@ SPECIAL_MOVES = [
         "cooldown": 36,
         "lunge": 2,
         "launch": -13,
+        "stun": 30,             # 0.5초 (30프레임 @ 60fps)
     },
 ]
+
+# 히트 이펙트 (Hit feedback)
+SHAKE_NORMAL = 7                # 일반 히트 화면 흔들림 프레임
+SHAKE_SPECIAL = 14             # 특수기 히트 화면 흔들림 프레임
+SHAKE_MAG = 9                  # 최대 흔들림 픽셀
+SPARK_LIFE = 12               # 임팩트 스파크 지속 프레임
+SPARK_LIFE_BIG = 18
 
 # 색상 (Colors) - R, G, B
 WHITE = (240, 240, 240)
@@ -90,6 +100,8 @@ HEALTH_GOOD = (80, 210, 110)
 HEALTH_LOW = (230, 80, 80)
 ATTACK_COLOR = (255, 220, 120)
 BLOCK_COLOR = (120, 220, 255)
+SPARK_COLOR = (255, 240, 190)   # 임팩트 스파크
+HURT_RAY_COLOR = (255, 235, 150)  # 피격자에게 내리쬐는 광선
 
 # 조작 키 (Controls) - pygame key 상수는 game.py에서 정의
 # Player 1: A/D 이동, W 점프, S 아래(커맨드), F 공격, G 방어

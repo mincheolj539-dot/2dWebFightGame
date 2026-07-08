@@ -185,18 +185,22 @@ class Fighter:
             x = int(self.x - reach)
         return pygame.Rect(x, y, reach, h)
 
-    def take_hit(self, damage, knockback_dir, launch=0):
-        """피격 처리. 방어 중이면 데미지/넉백 경감. launch가 있으면 공중으로 띄움."""
+    def take_hit(self, damage, knockback_dir, launch=0, stun=None):
+        """피격 처리. 방어 중이면 데미지/넉백 경감. launch가 있으면 공중으로 띄움.
+
+        stun: 피격 경직 프레임 (기술별 지정, 기본 HIT_STUN).
+        """
         if self.is_ko:
             return
+        stun = s.HIT_STUN if stun is None else stun
         if self.blocking:
             self.health -= damage * s.BLOCK_DAMAGE_MULT
             self.vx = knockback_dir * (s.KNOCKBACK * 0.4)
-            self.hitstun = max(self.hitstun, s.HIT_STUN // 2)
+            self.hitstun = max(self.hitstun, stun // 2)
         else:
             self.health -= damage
             self.vx = knockback_dir * s.KNOCKBACK
-            self.hitstun = s.HIT_STUN
+            self.hitstun = stun
             self.attack_timer = 0
             if launch:
                 self.vy = float(launch)
@@ -215,6 +219,7 @@ class Fighter:
             "y": int(self.y),
             "facing": self.facing,
             "flash": self.hitstun > 0 and (self.hitstun // 2) % 2 == 0,
+            "hurt": max(0, self.hitstun),   # 피격 경직 남은 프레임 (내리쬐는 광선 강도)
             "eye": (int(self.center_x + self.facing * 12), int(self.y + 26)),
             "fist": None,
             "guard": None,
@@ -247,9 +252,18 @@ class Fighter:
         st = self.render_state()
         body = self.rect
 
+        # 피격 시 위에서 내리쬐는 광선 (몸통보다 먼저 그려 뒤에 깔리게)
+        if st["hurt"] > 0:
+            self._draw_hurt_rays(surface, st["hurt"])
+
         color = s.WHITE if st["flash"] else self.color
         pygame.draw.rect(surface, color, body, border_radius=8)
         pygame.draw.rect(surface, self.accent, body, width=3, border_radius=8)
+
+        # 피격 중 밝은 외곽 글로우
+        if st["hurt"] > 0:
+            pygame.draw.rect(surface, s.SPARK_COLOR, body.inflate(6, 6),
+                             width=3, border_radius=10)
 
         # 눈 (바라보는 방향 표시)
         pygame.draw.circle(surface, s.BLACK, st["eye"], 5)
@@ -264,3 +278,20 @@ class Fighter:
             g = st["guard"]
             pygame.draw.rect(surface, s.BLOCK_COLOR,
                              (g["x"], g["y"], g["w"], g["h"]), border_radius=4)
+
+    def _draw_hurt_rays(self, surface, hurt):
+        """피격자 위에서 아래로 내리쬐는 반투명 광선 3줄 (경직 동안 반짝임)."""
+        alpha = int(150 * min(1.0, hurt / s.HIT_STUN))
+        ray = pygame.Surface((s.WIDTH, s.HEIGHT), pygame.SRCALPHA)
+        cx = int(self.center_x)
+        top = max(0, int(self.y) - 120)
+        for off in (-18, 0, 18):
+            # 위는 좁고 아래로 퍼지는 광선 (스포트라이트 느낌)
+            pts = [
+                (cx + off - 3, top),
+                (cx + off + 3, top),
+                (cx + off + 12, int(self.y) + 20),
+                (cx + off - 12, int(self.y) + 20),
+            ]
+            pygame.draw.polygon(ray, (*s.HURT_RAY_COLOR, alpha), pts)
+        surface.blit(ray, (0, 0))

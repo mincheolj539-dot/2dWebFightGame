@@ -5,6 +5,8 @@ pygame 키 입력을 액션으로 변환해 Match에 넣고, Match의 상태를 
 """
 
 import asyncio
+import math
+import random
 
 import pygame
 
@@ -40,6 +42,7 @@ class Game:
         self.font_small = pygame.font.SysFont("consolas", 20, bold=True)
 
         self._background = self._make_background()
+        self._world = pygame.Surface((s.WIDTH, s.HEIGHT))  # 흔들림 적용용 오프스크린
         self.running = True
         self.match = Match()
 
@@ -72,10 +75,22 @@ class Game:
 
     def draw(self):
         m = self.match
-        self.screen.blit(self._background, (0, 0))
 
-        m.p1.draw(self.screen)
-        m.p2.draw(self.screen)
+        # 월드(배경+파이터+스파크)를 오프스크린에 그린 뒤 흔들림 오프셋으로 blit.
+        # HUD/오버레이는 흔들리지 않게 화면에 직접 그린다.
+        self._world.blit(self._background, (0, 0))
+        m.p1.draw(self._world)
+        m.p2.draw(self._world)
+        self._draw_effects(self._world, m.effects)
+
+        if m.shake > 0:
+            mag = int(s.SHAKE_MAG * min(1.0, m.shake / s.SHAKE_SPECIAL))
+            dx = random.randint(-mag, mag)
+            dy = random.randint(-mag, mag)
+            self.screen.fill(s.BLACK)
+        else:
+            dx = dy = 0
+        self.screen.blit(self._world, (dx, dy))
 
         self._draw_hud()
 
@@ -91,6 +106,28 @@ class Game:
                 self._draw_center_text(f"{m.round_winner} WINS ROUND", None)
 
         pygame.display.flip()
+
+    def _draw_effects(self, surface, effects):
+        """임팩트 스파크: 방사형 선 + 중심 원 (수명에 따라 커지며 사라짐)."""
+        for e in effects:
+            t = e["t"]                      # 1.0 → 0.0
+            grow = 1.0 - t                  # 진행도 (터질수록 확산)
+            n = 10 if e["big"] else 7
+            base = (34 if e["big"] else 22)
+            length = int(base * (0.4 + grow))
+            inner = int(base * 0.3 * (0.4 + grow))
+            width = 4 if e["big"] else 3
+            cx, cy = e["x"], e["y"]
+            for i in range(n):
+                ang = (2 * math.pi * i / n) + grow
+                x2 = cx + int(math.cos(ang) * length)
+                y2 = cy + int(math.sin(ang) * length)
+                x1 = cx + int(math.cos(ang) * inner)
+                y1 = cy + int(math.sin(ang) * inner)
+                pygame.draw.line(surface, s.SPARK_COLOR, (x1, y1), (x2, y2), width)
+            r = int((10 if e["big"] else 7) * (0.5 + t))
+            pygame.draw.circle(surface, s.WHITE, (cx, cy), r)
+            pygame.draw.circle(surface, s.SPARK_COLOR, (cx, cy), r, 2)
 
     def _draw_hud(self):
         m = self.match
