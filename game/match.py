@@ -160,7 +160,7 @@ class Match:
 
     @staticmethod
     def _impact_frac(level):
-        return {"low": 0.8, "overhead": 0.18}.get(level, 0.4)
+        return {"low": 0.8, "overhead": 0.62}.get(level, 0.4)
 
     def _spawn_spark(self, x, y, big, blocked=False):
         self.effects.append({

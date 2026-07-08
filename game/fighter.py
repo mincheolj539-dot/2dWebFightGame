@@ -70,8 +70,12 @@ class Fighter:
 
         moving = False
 
-        # 웅크리기: 지상에서 아래 홀드 (공격 중이 아닐 때). 걷기/점프 불가.
-        self.crouching = actions["down"] and self.on_ground and not self.is_attacking
+        # 웅크리기: 지상에서 아래 홀드. 로우킥(CROUCH_MOVE) 중에도 자세 유지.
+        # (다른 지상 공격 중에는 일어선다)
+        self.crouching = (
+            actions["down"] and self.on_ground
+            and (not self.is_attacking or self.move is s.CROUCH_MOVE)
+        )
 
         # 방어: 방어 중에는 이동 불가. 아래+방어 = 앉아 막기(crouching과 공존).
         self.blocking = actions["block"] and self.on_ground
@@ -207,9 +211,9 @@ class Fighter:
             h = 24
             y = int(self.y + s.FIGHTER_H * 0.78)
         elif level == "overhead":
-            # 점프킥: 몸통 위쪽 (내려찍기)
-            h = 34
-            y = int(self.y + s.FIGHTER_H * 0.15)
+            # 점프킥: 아래로 뻗는 발 (공중에서 내려찍기)
+            h = 46
+            y = int(self.y + s.FIGHTER_H * 0.5)
         else:
             h = 24
             y = int(self.y + s.FIGHTER_H * 0.35)
@@ -275,7 +279,7 @@ class Fighter:
             elif lvl == "low":
                 arm_y = int(self.y + s.FIGHTER_H * 0.82)              # 로우킥 발밑
             elif lvl == "overhead":
-                arm_y = int(self.y + s.FIGHTER_H * 0.18)              # 점프킥 위쪽
+                arm_y = int(self.y + s.FIGHTER_H * 0.72)             # 점프킥: 아래로 뻗는 발
             else:
                 arm_y = int(self.y + s.FIGHTER_H * 0.35 + 12)
             if self.facing == 1:
