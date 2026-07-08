@@ -54,7 +54,9 @@ from game.game import Game
 - **`docs/`** — GitHub Pages 용 정적 클라이언트. `game.js` 상단 상수(캔버스 크기·색상·`HIT_STUN`/`SHAKE_*`)만 `settings.py` 와 수동 동기화 — 값을 바꾸면 양쪽 다 수정할 것. `index.html` 의 `?v=N` 캐시버스터는 `game.js`/`config.js` 를 수정할 때마다 숫자를 올려 플레이어의 브라우저가 옛 JS를 캐시하지 않게 한다.
   - 히트 이펙트(임팩트 스파크·화면 흔들림·피격 광선)는 `Match` 가 `state()`(effects/shake) 와 fighter의 `hurt` 로 데이터를 내려주고, `game.py`/`game.js` 두 렌더러가 동일하게 그린다. 흔들림은 월드(배경+파이터+스파크)에만 적용하고 HUD/오버레이는 고정.
 
-- **`game/settings.py`** — **모든 밸런스·색상·물리 상수의 단일 출처**. 기술 정의(`NORMAL_MOVE`, `SPECIAL_MOVES` — damage/range/duration/active/cooldown/lunge/launch)를 포함. 새 특수기 추가 = `SPECIAL_MOVES` 에 dict 하나 추가로 끝나야 정상 (서버·데스크톱 모두 자동 반영, JS 수정 불필요).
+- **`game/settings.py`** — **모든 밸런스·색상·물리 상수의 단일 출처**. 기술 정의(`NORMAL_MOVE`, `CROUCH_MOVE`, `AIR_MOVE`, `SPECIAL_MOVES` — 각 dict에 damage/range/duration/active/cooldown/lunge/launch/stun/**level**)를 포함. 새 특수기 추가 = `SPECIAL_MOVES` 에 dict 하나 추가로 끝나야 정상 (서버·데스크톱 자동 반영, JS 수정 불필요).
+
+- **스탠스 & 공격 레벨(철권식 이지선다)** — 공격은 컨텍스트로 선택된다(`Fighter._try_attack`): 공중→`AIR_MOVE`(점프킥), 커맨드 매치→특수기, 아래 홀드→`CROUCH_MOVE`(로우킥), 그 외→`NORMAL_MOVE`. 각 move의 `level`(mid/low/overhead)과 방어자 스탠스로 가드 성패를 `Match._is_blocked` 가 판정: 서서 막기=mid·overhead 방어, 앉아 막기=low 방어. 웅크리기(`crouching`, 아래 홀드+지상)는 걷기/점프를 막고 몸통 높이를 줄인다(`CROUCH_H`). 히트박스 y와 그리기 박스(`bx/by/bw/bh`)는 레벨·크라우치에 따라 `attack_hitbox`/`render_state` 가 계산한다.
 
 ## Conventions
 

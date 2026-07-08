@@ -175,21 +175,23 @@ function drawHurtRays(f) {
 }
 
 function drawFighter(f, color, accent) {
+  // 몸통 박스 (웅크리면 높이가 줄고 발은 바닥에 유지) — 서버가 계산한 bx/by/bw/bh 사용
+  const bx = f.bx, by = f.by, bw = f.bw, bh = f.bh;
   // 피격 시 내리쬐는 광선 (몸통보다 먼저 그려 뒤에 깔리게)
   if (f.hurt > 0) drawHurtRays(f);
   // 몸통
   ctx.fillStyle = f.flash ? COLORS.white : color;
-  roundRect(f.x, f.y, FIGHTER_W, FIGHTER_H, 8);
+  roundRect(bx, by, bw, bh, 8);
   ctx.fill();
   ctx.strokeStyle = accent;
   ctx.lineWidth = 3;
-  roundRect(f.x, f.y, FIGHTER_W, FIGHTER_H, 8);
+  roundRect(bx, by, bw, bh, 8);
   ctx.stroke();
   // 피격 중 밝은 외곽 글로우
   if (f.hurt > 0) {
     ctx.strokeStyle = COLORS.spark;
     ctx.lineWidth = 3;
-    roundRect(f.x - 3, f.y - 3, FIGHTER_W + 6, FIGHTER_H + 6, 10);
+    roundRect(bx - 3, by - 3, bw + 6, bh + 6, 10);
     ctx.stroke();
   }
   // 눈
@@ -257,11 +259,12 @@ function drawEffects(effects) {
   // 임팩트 스파크: 방사형 선 + 중심 원 (수명에 따라 커지며 사라짐)
   for (const e of effects) {
     const grow = 1 - e.t;
+    const sparkCol = e.block ? COLORS.block : COLORS.spark;  // 가드 시 파란 스파크
     const n = e.big ? 10 : 7;
     const base = e.big ? 34 : 22;
     const length = base * (0.4 + grow);
     const inner = base * 0.3 * (0.4 + grow);
-    ctx.strokeStyle = COLORS.spark;
+    ctx.strokeStyle = sparkCol;
     ctx.lineWidth = e.big ? 4 : 3;
     for (let i = 0; i < n; i++) {
       const ang = (2 * Math.PI * i / n) + grow;
@@ -273,7 +276,7 @@ function drawEffects(effects) {
     const r = (e.big ? 10 : 7) * (0.5 + e.t);
     ctx.fillStyle = COLORS.white;
     ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = COLORS.spark; ctx.lineWidth = 2;
+    ctx.strokeStyle = sparkCol; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI * 2); ctx.stroke();
   }
 }

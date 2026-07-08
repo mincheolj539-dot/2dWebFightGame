@@ -37,9 +37,16 @@ COMMAND_WINDOW = 35             # 커맨드 전체가 성립해야 하는 프레
 BUFFER_SIZE = 8                 # 입력 버퍼에 보관하는 최근 입력 개수
 
 # 기본 공격 (Normal attack)
+# 공격 레벨 (Attack levels) - 막기 이지선다의 핵심
+#   mid      : 서서 막기로만 막힘 (앉아 막기 관통) — 앉은 상대도 맞음
+#   low      : 앉아 막기로만 막힘 (서서 막기 관통)
+#   overhead : 서서 막기로만 막힘 (앉아 막기 관통) — 점프 공격
+# → 공격자는 low ↔ mid/overhead 를 섞고, 방어자는 서서/앉아 막기를 골라야 한다.
+
 NORMAL_MOVE = {
     "name": "PUNCH",
     "seq": (),                  # 커맨드 없음 (공격 키만)
+    "level": "mid",
     "damage": ATTACK_DAMAGE,
     "range": ATTACK_RANGE,
     "duration": ATTACK_DURATION,
@@ -50,11 +57,42 @@ NORMAL_MOVE = {
     "stun": HIT_STUN,           # 명중 시 피격자 경직 프레임
 }
 
+# 앉아 공격 (아래 홀드 + 공격): 로우킥 — 앉아 막아야 막힌다
+CROUCH_MOVE = {
+    "name": "LOW KICK",
+    "seq": (),
+    "level": "low",
+    "damage": 8,
+    "range": 74,
+    "duration": 14,
+    "active": (4, 9),
+    "cooldown": 20,
+    "lunge": 0,
+    "launch": 0,
+    "stun": HIT_STUN,
+}
+
+# 점프 공격 (공중 + 공격): 점프킥 — 오버헤드, 서서 막아야 막힌다
+AIR_MOVE = {
+    "name": "JUMP KICK",
+    "seq": (),
+    "level": "overhead",
+    "damage": 12,
+    "range": 66,
+    "duration": 20,
+    "active": (3, 14),          # 공중 지속이 길다
+    "cooldown": 6,
+    "lunge": 0,
+    "launch": 0,
+    "stun": HIT_STUN,
+}
+
 # 특수기 (Special moves) - seq는 공격 키 직전까지의 방향 입력 (facing 기준 상대 방향)
 SPECIAL_MOVES = [
     {
         "name": "DASH PUNCH",   # →→ + 공격: 돌진 펀치
         "seq": ("forward", "forward"),
+        "level": "mid",
         "damage": 16,
         "range": 80,
         "duration": 16,
@@ -67,6 +105,7 @@ SPECIAL_MOVES = [
     {
         "name": "UPPERCUT",     # ↓→ + 공격: 어퍼컷 (상대를 띄움 + 0.5초 스턴)
         "seq": ("down", "forward"),
+        "level": "mid",
         "damage": 14,
         "range": 60,
         "duration": 18,
@@ -77,6 +116,9 @@ SPECIAL_MOVES = [
         "stun": 30,             # 0.5초 (30프레임 @ 60fps)
     },
 ]
+
+# 웅크리기 (Crouch)
+CROUCH_H = 74                   # 앉았을 때 몸통 높이 (기본 FIGHTER_H)
 
 # 히트 이펙트 (Hit feedback)
 SHAKE_NORMAL = 7                # 일반 히트 화면 흔들림 프레임

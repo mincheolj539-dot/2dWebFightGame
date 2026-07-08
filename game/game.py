@@ -110,8 +110,10 @@ class Game:
     def _draw_effects(self, surface, effects):
         """임팩트 스파크: 방사형 선 + 중심 원 (수명에 따라 커지며 사라짐)."""
         for e in effects:
-            t = e["t"]                      # 1.0 → 0.0
+            t = e["life"] / e["max"]        # 1.0 → 0.0 (raw effect 딕셔너리)
             grow = 1.0 - t                  # 진행도 (터질수록 확산)
+            blocked = e.get("block")
+            spark_col = s.BLOCK_COLOR if blocked else s.SPARK_COLOR
             n = 10 if e["big"] else 7
             base = (34 if e["big"] else 22)
             length = int(base * (0.4 + grow))
@@ -124,10 +126,10 @@ class Game:
                 y2 = cy + int(math.sin(ang) * length)
                 x1 = cx + int(math.cos(ang) * inner)
                 y1 = cy + int(math.sin(ang) * inner)
-                pygame.draw.line(surface, s.SPARK_COLOR, (x1, y1), (x2, y2), width)
+                pygame.draw.line(surface, spark_col, (x1, y1), (x2, y2), width)
             r = int((10 if e["big"] else 7) * (0.5 + t))
             pygame.draw.circle(surface, s.WHITE, (cx, cy), r)
-            pygame.draw.circle(surface, s.SPARK_COLOR, (cx, cy), r, 2)
+            pygame.draw.circle(surface, spark_col, (cx, cy), r, 2)
 
     def _draw_hud(self):
         m = self.match

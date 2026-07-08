@@ -129,22 +129,46 @@ class Match:
             attacker.has_hit = True
             direction = 1 if defender.center_x >= attacker.center_x else -1
             move = attacker.move
-            defender.take_hit(move["damage"], direction, move["launch"], move.get("stun"))
-            big = move is not s.NORMAL_MOVE
-            # 임팩트 지점: 피격자의 맞은 쪽 옆면, 몸통 중단
+            blocked = self._is_blocked(move, defender)
+            defender.take_hit(move["damage"], direction, move["launch"],
+                              move.get("stun"), blocked)
+            big = move is not s.NORMAL_MOVE and move["level"] != "low"
+            # 임팩트 지점: 피격자의 맞은 쪽 옆면. 막았으면 가드 높이, 아니면 레벨별.
             impact_x = defender.x if direction == 1 else defender.x + s.FIGHTER_W
-            impact_y = defender.y + s.FIGHTER_H * 0.4
-            self._spawn_spark(impact_x, impact_y, big)
-            self.shake = max(self.shake, s.SHAKE_SPECIAL if big else s.SHAKE_NORMAL)
-            if big:
+            impact_y = defender.y + s.FIGHTER_H * self._impact_frac(move["level"])
+            self._spawn_spark(impact_x, impact_y, big and not blocked, blocked)
+            if blocked:
+                self.shake = max(self.shake, s.SHAKE_NORMAL // 2)
+            else:
+                self.shake = max(self.shake, s.SHAKE_SPECIAL if big else s.SHAKE_NORMAL)
+            if move is not s.NORMAL_MOVE and move["level"] != "low":
                 self.popup = (f"{attacker.name} {move['name']}!", s.FPS)
 
-    def _spawn_spark(self, x, y, big):
+    @staticmethod
+    def _is_blocked(move, defender):
+        """공격 레벨 vs 방어 스탠스로 가드 성공 여부 판정.
+
+        서서 막기(blocking, not crouch): mid/overhead 방어.
+        앉아 막기(blocking + crouch):     low 방어.
+        """
+        if not defender.blocking:
+            return False
+        level = move["level"]
+        if defender.crouching:
+            return level == "low"
+        return level in ("mid", "overhead")
+
+    @staticmethod
+    def _impact_frac(level):
+        return {"low": 0.8, "overhead": 0.18}.get(level, 0.4)
+
+    def _spawn_spark(self, x, y, big, blocked=False):
         self.effects.append({
             "x": int(x), "y": int(y),
             "life": s.SPARK_LIFE_BIG if big else s.SPARK_LIFE,
             "max": s.SPARK_LIFE_BIG if big else s.SPARK_LIFE,
             "big": big,
+            "block": blocked,
         })
 
     def _finish_round(self):
@@ -189,7 +213,8 @@ class Match:
             "match_winner": self.match_winner,
             "popup": self.popup[0] if self.popup else None,
             "effects": [
-                {"x": e["x"], "y": e["y"], "t": e["life"] / e["max"], "big": e["big"]}
+                {"x": e["x"], "y": e["y"], "t": e["life"] / e["max"],
+                 "big": e["big"], "block": e["block"]}
                 for e in self.effects
             ],
             "shake": self.shake,

@@ -33,6 +33,8 @@ class Fighter:
         self.cooldown = 0                 # 공격 후 재입력 대기
         self.hitstun = 0                  # 피격 경직
         self.blocking = False
+        self.crouching = False            # 웅크리기 (아래 홀드, 지상)
+        self.holding_down = False         # 아래 키 눌림 상태 (공격 시 로우킥 판정용)
         self.has_hit = False              # 이번 공격이 이미 명중했는지 (다단히트 방지)
         self.move = s.NORMAL_MOVE         # 현재/마지막 시전한 기술
         self.input_buffer = []            # [(frame, token)] - 커맨드 판정용 최근 방향 입력
@@ -57,18 +59,24 @@ class Fighter:
 
     # ---- 입력 (Input) ----
     def handle_input(self, actions):
-        """눌림 상태 액션 딕셔너리로 이동/점프/방어를 처리한다 (연속 입력)."""
+        """눌림 상태 액션 딕셔너리로 이동/점프/방어/웅크리기를 처리한다 (연속 입력)."""
+        self.holding_down = actions["down"]
+
         # 경직 중이거나 KO면 입력 무시
         if self.hitstun > 0 or self.is_ko:
             self.blocking = False
+            self.crouching = False
             return
 
         moving = False
 
-        # 방어: 방어 중에는 이동 불가
+        # 웅크리기: 지상에서 아래 홀드 (공격 중이 아닐 때). 걷기/점프 불가.
+        self.crouching = actions["down"] and self.on_ground and not self.is_attacking
+
+        # 방어: 방어 중에는 이동 불가. 아래+방어 = 앉아 막기(crouching과 공존).
         self.blocking = actions["block"] and self.on_ground
 
-        if not self.blocking and not self.is_attacking:
+        if not self.blocking and not self.crouching and not self.is_attacking:
             if actions["left"]:
                 self.vx = -s.MOVE_SPEED
                 moving = True
@@ -76,12 +84,12 @@ class Fighter:
                 self.vx = s.MOVE_SPEED
                 moving = True
 
-        # 공격 중(돌진 특수기)에는 lunge 속도를 유지해야 하므로 vx를 0으로 만들지 않음
+        # 공격 중(돌진 특수기)이거나 공중이면 vx 유지 (관성/lunge 보존)
         if not moving and self.on_ground and not self.is_attacking:
             self.vx = 0.0
 
-        # 점프
-        if actions["jump"] and self.on_ground and not self.blocking:
+        # 점프 (웅크리는 중엔 불가)
+        if actions["jump"] and self.on_ground and not self.blocking and not self.crouching:
             self.vy = s.JUMP_VELOCITY
             self.on_ground = False
 
@@ -107,20 +115,37 @@ class Fighter:
         del self.input_buffer[:-s.BUFFER_SIZE]
 
     def _try_attack(self, frame):
-        """공격 입력 시점의 버퍼로 특수기 커맨드를 판정하고 기술을 시전한다."""
-        if (self.hitstun > 0 or self.is_ko or self.is_attacking
-                or self.blocking or self.cooldown > 0):
+        """상황(공중/앉기/커맨드)에 맞는 기술을 골라 시전한다.
+
+        우선순위:
+          1) 공중       → 점프킥 (오버헤드)
+          2) 커맨드 매치 → 특수기 (어퍼컷 등, 아래를 눌러도 커맨드가 우선)
+          3) 아래 홀드   → 로우킥
+          4) 그 외       → 기본 펀치
+        """
+        if self.hitstun > 0 or self.is_ko or self.is_attacking or self.cooldown > 0:
             return
-        move = s.NORMAL_MOVE
-        for special in s.SPECIAL_MOVES:
-            if self._buffer_ends_with(special["seq"], frame):
-                move = special
-                break
+        # 지상에서 방어 중엔 공격 불가 (공중엔 방어 개념이 없으므로 점프킥 허용)
+        if self.blocking and self.on_ground:
+            return
+
+        if not self.on_ground:
+            move = s.AIR_MOVE
+        else:
+            move = None
+            for special in s.SPECIAL_MOVES:
+                if self._buffer_ends_with(special["seq"], frame):
+                    move = special
+                    break
+            if move is None:
+                move = s.CROUCH_MOVE if self.holding_down else s.NORMAL_MOVE
+
         self.move = move
         self.attack_timer = move["duration"]
         self.cooldown = move["duration"] + move["cooldown"]
         self.has_hit = False
-        self.vx = self.facing * move["lunge"]
+        if self.on_ground:                # 공중에선 관성 유지 (lunge 미적용)
+            self.vx = self.facing * move["lunge"]
         self.input_buffer.clear()         # 같은 입력으로 연속 발동 방지
 
     def _buffer_ends_with(self, seq, frame):
@@ -172,10 +197,19 @@ class Fighter:
         if not (m["active"][0] <= elapsed <= m["active"][1]):
             return None
         reach = m["range"]
+        level = m["level"]
         if m["launch"]:
             # 어퍼컷: 몸통 위쪽까지 세로로 긴 히트박스
             h = int(s.FIGHTER_H * 0.6)
             y = int(self.y)
+        elif level == "low":
+            # 로우킥: 발밑 근처
+            h = 24
+            y = int(self.y + s.FIGHTER_H * 0.78)
+        elif level == "overhead":
+            # 점프킥: 몸통 위쪽 (내려찍기)
+            h = 34
+            y = int(self.y + s.FIGHTER_H * 0.15)
         else:
             h = 24
             y = int(self.y + s.FIGHTER_H * 0.35)
@@ -185,15 +219,16 @@ class Fighter:
             x = int(self.x - reach)
         return pygame.Rect(x, y, reach, h)
 
-    def take_hit(self, damage, knockback_dir, launch=0, stun=None):
-        """피격 처리. 방어 중이면 데미지/넉백 경감. launch가 있으면 공중으로 띄움.
+    def take_hit(self, damage, knockback_dir, launch=0, stun=None, blocked=False):
+        """피격 처리. blocked=True면 데미지/넉백 경감(가드). launch면 공중으로 띄움.
 
+        blocked 여부는 공격 레벨 vs 방어 스탠스로 Match가 판정해 넘긴다.
         stun: 피격 경직 프레임 (기술별 지정, 기본 HIT_STUN).
         """
         if self.is_ko:
             return
         stun = s.HIT_STUN if stun is None else stun
-        if self.blocking:
+        if blocked:
             self.health -= damage * s.BLOCK_DAMAGE_MULT
             self.vx = knockback_dir * (s.KNOCKBACK * 0.4)
             self.hitstun = max(self.hitstun, stun // 2)
@@ -214,13 +249,18 @@ class Fighter:
         데스크톱 draw()와 웹 클라이언트(JSON 전송)가 공유하는 단일 출처 —
         외형 계산 로직을 JS에 중복 구현하지 않기 위함.
         """
+        # 몸통 그리기 박스 (웅크리면 높이가 줄고 발은 바닥에 유지)
+        bh = s.CROUCH_H if self.crouching else s.FIGHTER_H
+        by = int(self.y + (s.FIGHTER_H - bh))
         st = {
             "x": int(self.x),
             "y": int(self.y),
+            "bx": int(self.x), "by": by, "bw": s.FIGHTER_W, "bh": bh,
+            "crouch": self.crouching,
             "facing": self.facing,
             "flash": self.hitstun > 0 and (self.hitstun // 2) % 2 == 0,
             "hurt": max(0, self.hitstun),   # 피격 경직 남은 프레임 (내리쬐는 광선 강도)
-            "eye": (int(self.center_x + self.facing * 12), int(self.y + 26)),
+            "eye": (int(self.center_x + self.facing * 12), by + int(bh * 0.30)),
             "fist": None,
             "guard": None,
         }
@@ -229,9 +269,13 @@ class Fighter:
             elapsed = m["duration"] - self.attack_timer
             active = m["active"][0] <= elapsed <= m["active"][1]
             reach = m["range"] if active else m["range"] // 2
+            lvl = m["level"]
             if m["launch"]:
-                # 어퍼컷: 주먹이 위로 올라가는 궤적
-                arm_y = int(self.y + s.FIGHTER_H * 0.5 - elapsed * 4)
+                arm_y = int(self.y + s.FIGHTER_H * 0.5 - elapsed * 4)  # 어퍼컷 상승 궤적
+            elif lvl == "low":
+                arm_y = int(self.y + s.FIGHTER_H * 0.82)              # 로우킥 발밑
+            elif lvl == "overhead":
+                arm_y = int(self.y + s.FIGHTER_H * 0.18)              # 점프킥 위쪽
             else:
                 arm_y = int(self.y + s.FIGHTER_H * 0.35 + 12)
             if self.facing == 1:
@@ -244,13 +288,13 @@ class Fighter:
             }
         if self.blocking:
             gx = int(self.x + s.FIGHTER_W) if self.facing == 1 else int(self.x - 8)
-            st["guard"] = {"x": gx, "y": int(self.y + 20), "w": 8, "h": s.FIGHTER_H - 40}
+            st["guard"] = {"x": gx, "y": by + int(bh * 0.18), "w": 8, "h": int(bh * 0.6)}
         return st
 
     # ---- 렌더링 (Draw) ----
     def draw(self, surface):
         st = self.render_state()
-        body = self.rect
+        body = pygame.Rect(st["bx"], st["by"], st["bw"], st["bh"])
 
         # 피격 시 위에서 내리쬐는 광선 (몸통보다 먼저 그려 뒤에 깔리게)
         if st["hurt"] > 0:
