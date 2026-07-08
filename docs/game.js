@@ -62,7 +62,7 @@ function shareUrl(code) {
 // ---- WebSocket ----
 function connect(onOpen) {
   ws = new WebSocket(SERVER);
-  ws.onopen = onOpen;
+  ws.onopen = () => { flushPending(); onOpen(); };
   ws.onclose = () => {
     if (!started) setStatus("서버에 연결할 수 없습니다. 서버 주소를 확인하세요: " + SERVER);
     else { overlay.classList.remove("hidden"); setStatus("서버와의 연결이 끊어졌습니다"); }
@@ -98,19 +98,34 @@ function connect(onOpen) {
   };
 }
 
+// 소켓이 아직 열리지 않았으면(Render 콜드 스타트 등) 보류했다가 open 시 전송.
+let pendingSend = null;
 function send(obj) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+  else pendingSend = obj;              // 방 생성/참가 클릭이 연결 전에 눌린 경우
+}
+function flushPending() {
+  if (pendingSend && ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(pendingSend));
+    pendingSend = null;
+  }
 }
 
 // ---- 로비 UI ----
+// 아직 연결 전이면 "서버 깨우는 중" 안내 (Render 무료 서버 콜드 스타트는 최대 1분).
+const connecting = () => !(ws && ws.readyState === WebSocket.OPEN);
 document.getElementById("btn-create").onclick = () => {
   lobbyEl.style.display = "none";
-  setStatus("방을 만드는 중...");
-  send({ t: "create" });
+  setStatus(connecting() ? "서버 깨우는 중... (무료 서버라 최대 1분 걸릴 수 있어요)"
+                         : "방을 만드는 중...");
+  send({ t: "create" });              // 연결 전이면 큐에 담겨 열릴 때 자동 전송
 };
 document.getElementById("btn-join").onclick = () => {
   const code = document.getElementById("room-input").value.trim().toUpperCase();
-  if (code.length === 4) send({ t: "join", room: code });
+  if (code.length !== 4) return;
+  setStatus(connecting() ? "서버 깨우는 중... (무료 서버라 최대 1분 걸릴 수 있어요)"
+                         : "방 " + code + " 에 참가하는 중...");
+  send({ t: "join", room: code });
 };
 copyBtn.onclick = () => {
   navigator.clipboard.writeText(shareEl.textContent);
@@ -246,13 +261,17 @@ function draw() {
 }
 
 // ---- 시작 ----
+const roomFromUrl = params.get("room");
+if (roomFromUrl) {
+  // 링크로 들어온 참가자: 바로 join 시도 (연결 전이면 큐에 담김)
+  setStatus("방 " + roomFromUrl.toUpperCase() + " 에 참가하는 중...");
+  send({ t: "join", room: roomFromUrl });
+} else {
+  // 로비를 즉시 보여줘 콜드 스타트 중에도 버튼을 누를 수 있게 한다 (클릭은 큐에 담김)
+  showLobby();
+}
 connect(() => {
-  const roomFromUrl = params.get("room");
-  if (roomFromUrl) {
-    setStatus("방 " + roomFromUrl.toUpperCase() + " 에 참가하는 중...");
-    send({ t: "join", room: roomFromUrl });
-  } else {
-    showLobby();
-  }
+  // 연결 완료 시점에 아직 로비 상태면(방을 아직 안 골랐으면) 안내만 갱신
+  if (!mySide && !pendingSend && !roomFromUrl) showLobby();
 });
 draw();
