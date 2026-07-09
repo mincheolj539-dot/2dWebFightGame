@@ -36,6 +36,10 @@ ROUNDS_TO_WIN = 2               # 선승제 (best of 3)
 COMMAND_WINDOW = 35             # 커맨드 전체가 성립해야 하는 프레임 수
 BUFFER_SIZE = 8                 # 입력 버퍼에 보관하는 최근 입력 개수
 
+# 대시 (Dash) - 같은 방향 2연타 (앞앞 = 전진, 뒤뒤 = 후진)
+DASH_SPEED = 13                 # 대시 중 이동 속도
+DASH_DURATION = 10             # 대시 지속 프레임
+
 # 기본 공격 (Normal attack)
 # 공격 레벨 (Attack levels) - 막기 이지선다의 핵심
 #   mid      : 서서 막기로만 막힘 (앉아 막기 관통) — 앉은 상대도 맞음
@@ -89,19 +93,6 @@ AIR_MOVE = {
 
 # 특수기 (Special moves) - seq는 공격 키 직전까지의 방향 입력 (facing 기준 상대 방향)
 SPECIAL_MOVES = [
-    {
-        "name": "DASH PUNCH",   # →→ + 공격: 돌진 펀치
-        "seq": ("forward", "forward"),
-        "level": "mid",
-        "damage": 16,
-        "range": 80,
-        "duration": 16,
-        "active": (5, 11),
-        "cooldown": 30,
-        "lunge": 10,
-        "launch": 0,
-        "stun": HIT_STUN,
-    },
     {
         "name": "UPPERCUT",     # ↓→ + 공격: 어퍼컷 (상대를 띄움 + 0.5초 스턴)
         "seq": ("down", "forward"),

@@ -37,6 +37,8 @@ class Fighter:
         self.holding_down = False         # 아래 키 눌림 상태 (공격 시 로우킥 판정용)
         self.counter_timer = 0            # 반격 자세 남은 프레임 (>0이면 반격 판정)
         self.counter_cd = 0               # 반격 재사용 쿨타임 남은 프레임
+        self.dash_timer = 0               # 대시 남은 프레임 (>0이면 대시 이동 중)
+        self.dash_vx = 0.0                # 대시 속도 (절대 방향)
         self.has_hit = False              # 이번 공격이 이미 명중했는지 (다단히트 방지)
         self.move = s.NORMAL_MOVE         # 현재/마지막 시전한 기술
         self.input_buffer = []            # [(frame, token)] - 커맨드 판정용 최근 방향 입력
@@ -70,6 +72,13 @@ class Fighter:
 
         # 경직 중이거나 KO면 입력 무시
         if self.hitstun > 0 or self.is_ko:
+            self.blocking = False
+            self.crouching = False
+            return
+
+        # 대시 중이면 대시 속도로 이동 (공격 중이 아닐 때). 걷기/방어/웅크리기 무시.
+        if self.dash_timer > 0 and not self.is_attacking:
+            self.vx = self.dash_vx
             self.blocking = False
             self.crouching = False
             return
@@ -123,6 +132,20 @@ class Fighter:
             return                        # jump/block 등은 커맨드에 쓰지 않음
         self.input_buffer.append((frame, token))
         del self.input_buffer[:-s.BUFFER_SIZE]
+        # 대시: 같은 방향(앞/뒤) 2연타 → 대시 이동
+        if token in ("forward", "back"):
+            self._check_dash(frame, token)
+
+    def _check_dash(self, frame, token):
+        """같은 방향 2연타면 그 방향으로 대시 (지상, 공격/반격/경직 중 제외)."""
+        if (not self.on_ground or self.is_attacking or self.hitstun > 0
+                or self.counter_active):
+            return
+        if self._buffer_ends_with((token, token), frame):
+            self.dash_timer = s.DASH_DURATION
+            direction = self.facing if token == "forward" else -self.facing
+            self.dash_vx = direction * s.DASH_SPEED
+            self.input_buffer.clear()     # 3연타로 재발동되지 않게
 
     def _try_attack(self, frame):
         """상황(방어중/공중/앉기/커맨드)에 맞는 기술을 골라 시전한다.
@@ -201,6 +224,8 @@ class Fighter:
         # 타이머 감소
         if self.attack_timer > 0:
             self.attack_timer -= 1
+        if self.dash_timer > 0:
+            self.dash_timer -= 1
         if self.counter_cd > 0:
             self.counter_cd -= 1
         if self.counter_timer > 0:
