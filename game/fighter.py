@@ -35,6 +35,7 @@ class Fighter:
         self.blocking = False
         self.crouching = False            # 웅크리기 (아래 홀드, 지상)
         self.holding_down = False         # 아래 키 눌림 상태 (공격 시 로우킥 판정용)
+        self.counter_timer = 0            # 반격 자세 남은 프레임 (>0이면 반격 판정)
         self.has_hit = False              # 이번 공격이 이미 명중했는지 (다단히트 방지)
         self.move = s.NORMAL_MOVE         # 현재/마지막 시전한 기술
         self.input_buffer = []            # [(frame, token)] - 커맨드 판정용 최근 방향 입력
@@ -56,6 +57,10 @@ class Fighter:
     @property
     def is_attacking(self):
         return self.attack_timer > 0
+
+    @property
+    def counter_active(self):
+        return self.counter_timer > 0
 
     # ---- 입력 (Input) ----
     def handle_input(self, actions):
@@ -136,6 +141,10 @@ class Fighter:
         if not self.on_ground:
             move = s.AIR_MOVE
         else:
+            # 반격기 커맨드(뒤,뒤 + 공격)가 최우선 — 히트박스 없는 반격 자세로 진입
+            if self._buffer_ends_with(s.COUNTER_MOVE["seq"], frame):
+                self._start_counter()
+                return
             move = None
             for special in s.SPECIAL_MOVES:
                 if self._buffer_ends_with(special["seq"], frame):
@@ -151,6 +160,13 @@ class Fighter:
         if self.on_ground:                # 공중에선 관성 유지 (lunge 미적용)
             self.vx = self.facing * move["lunge"]
         self.input_buffer.clear()         # 같은 입력으로 연속 발동 방지
+
+    def _start_counter(self):
+        """반격 자세 진입 (히트박스 없음). 0.5초 안에 맞으면 Match가 반격 처리."""
+        self.counter_timer = s.COUNTER_WINDOW
+        self.cooldown = s.COUNTER_WINDOW + s.COUNTER_COOLDOWN
+        self.vx = 0.0
+        self.input_buffer.clear()
 
     def _buffer_ends_with(self, seq, frame):
         """최근 COMMAND_WINDOW 프레임 내 방향 입력이 seq로 끝나는지 검사."""
@@ -177,6 +193,8 @@ class Fighter:
         # 타이머 감소
         if self.attack_timer > 0:
             self.attack_timer -= 1
+        if self.counter_timer > 0:
+            self.counter_timer -= 1
         if self.cooldown > 0:
             self.cooldown -= 1
         if self.hitstun > 0:
@@ -264,6 +282,7 @@ class Fighter:
             "facing": self.facing,
             "flash": self.hitstun > 0 and (self.hitstun // 2) % 2 == 0,
             "hurt": max(0, self.hitstun),   # 피격 경직 남은 프레임 (내리쬐는 광선 강도)
+            "counter": max(0, self.counter_timer),  # 반격 자세 남은 프레임 (>0이면 빛남)
             "eye": (int(self.center_x + self.facing * 12), by + int(bh * 0.30)),
             "fist": None,
             "guard": None,
@@ -304,6 +323,11 @@ class Fighter:
         if st["hurt"] > 0:
             self._draw_hurt_rays(surface, st["hurt"])
 
+        # 반격 자세: 몸통 뒤에 금색 오라 (깜빡임)
+        if st["counter"] > 0 and (st["counter"] // 3) % 2 == 0:
+            pygame.draw.rect(surface, s.COUNTER_COLOR, body.inflate(16, 16),
+                             border_radius=12)
+
         color = s.WHITE if st["flash"] else self.color
         pygame.draw.rect(surface, color, body, border_radius=8)
         pygame.draw.rect(surface, self.accent, body, width=3, border_radius=8)
@@ -312,6 +336,10 @@ class Fighter:
         if st["hurt"] > 0:
             pygame.draw.rect(surface, s.SPARK_COLOR, body.inflate(6, 6),
                              width=3, border_radius=10)
+        # 반격 자세 금색 외곽선
+        if st["counter"] > 0:
+            pygame.draw.rect(surface, s.COUNTER_COLOR, body.inflate(8, 8),
+                             width=3, border_radius=11)
 
         # 눈 (바라보는 방향 표시)
         pygame.draw.circle(surface, s.BLACK, st["eye"], 5)

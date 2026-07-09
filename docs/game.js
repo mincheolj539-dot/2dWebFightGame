@@ -16,6 +16,7 @@ const COLORS = {
   healthGood: "rgb(80,210,110)", healthLow: "rgb(230,80,80)",
   attack: "rgb(255,220,120)", block: "rgb(120,220,255)",
   spark: "rgb(255,240,190)", hurtRay: "255,235,150",
+  counter: "rgb(255,220,70)",
 };
 const HIT_STUN = 14, SHAKE_MAG = 9, SHAKE_SPECIAL = 14;  // settings.py와 동기화
 
@@ -179,6 +180,12 @@ function drawFighter(f, color, accent) {
   const bx = f.bx, by = f.by, bw = f.bw, bh = f.bh;
   // 피격 시 내리쬐는 광선 (몸통보다 먼저 그려 뒤에 깔리게)
   if (f.hurt > 0) drawHurtRays(f);
+  // 반격 자세: 몸통 뒤에 금색 오라 (깜빡임)
+  if (f.counter > 0 && Math.floor(f.counter / 3) % 2 === 0) {
+    ctx.fillStyle = COLORS.counter;
+    roundRect(bx - 8, by - 8, bw + 16, bh + 16, 12);
+    ctx.fill();
+  }
   // 몸통
   ctx.fillStyle = f.flash ? COLORS.white : color;
   roundRect(bx, by, bw, bh, 8);
@@ -192,6 +199,13 @@ function drawFighter(f, color, accent) {
     ctx.strokeStyle = COLORS.spark;
     ctx.lineWidth = 3;
     roundRect(bx - 3, by - 3, bw + 6, bh + 6, 10);
+    ctx.stroke();
+  }
+  // 반격 자세 금색 외곽선
+  if (f.counter > 0) {
+    ctx.strokeStyle = COLORS.counter;
+    ctx.lineWidth = 3;
+    roundRect(bx - 4, by - 4, bw + 8, bh + 8, 11);
     ctx.stroke();
   }
   // 눈

@@ -120,6 +120,16 @@ SPECIAL_MOVES = [
 # 웅크리기 (Crouch)
 CROUCH_H = 74                   # 앉았을 때 몸통 높이 (기본 FIGHTER_H)
 
+# 반격기 (Counter / parry) - 뒤,뒤 + 공격
+COUNTER_MOVE = {
+    "name": "COUNTER",
+    "seq": ("back", "back"),
+}
+COUNTER_WINDOW = 30             # 반격 자세 유지·판정 프레임 (0.5초 @ 60fps)
+COUNTER_COOLDOWN = 45           # 반격 종료 후 재사용 대기
+COUNTER_MULT = 1.5             # 되돌려주는 데미지 배율
+COUNTER_STUN = 24               # 반격당한 공격자 경직 프레임
+
 # 히트 이펙트 (Hit feedback)
 SHAKE_NORMAL = 7                # 일반 히트 화면 흔들림 프레임
 SHAKE_SPECIAL = 14             # 특수기 히트 화면 흔들림 프레임
@@ -144,6 +154,7 @@ ATTACK_COLOR = (255, 220, 120)
 BLOCK_COLOR = (120, 220, 255)
 SPARK_COLOR = (255, 240, 190)   # 임팩트 스파크
 HURT_RAY_COLOR = (255, 235, 150)  # 피격자에게 내리쬐는 광선
+COUNTER_COLOR = (255, 220, 70)  # 반격 자세 빛남 (금색)
 
 # 조작 키 (Controls) - pygame key 상수는 game.py에서 정의
 # Player 1: A/D 이동, W 점프, S 아래(커맨드), F 공격, G 방어

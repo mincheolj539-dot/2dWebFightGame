@@ -127,8 +127,22 @@ class Match:
         hb = attacker.attack_hitbox()
         if hb and hb.colliderect(defender.rect):
             attacker.has_hit = True
-            direction = 1 if defender.center_x >= attacker.center_x else -1
             move = attacker.move
+
+            # 반격기: 방어자가 반격 자세면 피해 무효 + 공격자에게 1.5배 반사
+            if defender.counter_active:
+                defender.counter_timer = 0                 # 반격 소비
+                back = 1 if attacker.center_x >= defender.center_x else -1
+                dmg = move["damage"] * s.COUNTER_MULT
+                attacker.take_hit(dmg, back, 0, s.COUNTER_STUN, blocked=False)
+                impact_x = attacker.x if back == -1 else attacker.x + s.FIGHTER_W
+                impact_y = attacker.y + s.FIGHTER_H * 0.4
+                self._spawn_spark(impact_x, impact_y, True, False)
+                self.shake = max(self.shake, s.SHAKE_SPECIAL)
+                self.popup = (f"{defender.name} COUNTER!", s.FPS)
+                return
+
+            direction = 1 if defender.center_x >= attacker.center_x else -1
             blocked = self._is_blocked(move, defender)
             defender.take_hit(move["damage"], direction, move["launch"],
                               move.get("stun"), blocked)
