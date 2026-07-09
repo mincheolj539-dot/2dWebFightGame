@@ -122,9 +122,10 @@ CROUCH_H = 74                   # 앉았을 때 몸통 높이 (기본 FIGHTER_H)
 
 # 반격기 (Counter / parry) - 방어(G) 홀드 중 공격(F)
 COUNTER_WINDOW = 30             # 반격 자세 유지·판정 프레임 (0.5초 @ 60fps)
-COUNTER_COOLDOWN = 45           # 반격 종료 후 재사용 대기
+COUNTER_COOLDOWN = 75           # 창 종료 후 재사용까지 추가 대기 (쿨타임)
 COUNTER_MULT = 1.5             # 되돌려주는 데미지 배율
 COUNTER_STUN = 24               # 반격당한 공격자 경직 프레임
+COUNTER_FAIL_STUN = 36          # 반격 실패(창 만료·헛방) 시 자신이 받는 경직 (0.6초)
 
 # 히트 이펙트 (Hit feedback)
 SHAKE_NORMAL = 7                # 일반 히트 화면 흔들림 프레임

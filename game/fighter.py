@@ -36,6 +36,7 @@ class Fighter:
         self.crouching = False            # 웅크리기 (아래 홀드, 지상)
         self.holding_down = False         # 아래 키 눌림 상태 (공격 시 로우킥 판정용)
         self.counter_timer = 0            # 반격 자세 남은 프레임 (>0이면 반격 판정)
+        self.counter_cd = 0               # 반격 재사용 쿨타임 남은 프레임
         self.has_hit = False              # 이번 공격이 이미 명중했는지 (다단히트 방지)
         self.move = s.NORMAL_MOVE         # 현재/마지막 시전한 기술
         self.input_buffer = []            # [(frame, token)] - 커맨드 판정용 최근 방향 입력
@@ -135,10 +136,14 @@ class Fighter:
         """
         if self.hitstun > 0 or self.is_ko or self.is_attacking or self.cooldown > 0:
             return
+        if self.counter_active:           # 이미 반격 자세면 재입력 무시
+            return
 
         # 반격기: 지상에서 방어(G) 홀드 중 공격(F) → 히트박스 없는 반격 자세
+        # 쿨타임 중에는 발동되지 않는다.
         if self.on_ground and self.blocking:
-            self._start_counter()
+            if self.counter_cd == 0:
+                self._start_counter()
             return
 
         if not self.on_ground:
@@ -161,9 +166,13 @@ class Fighter:
         self.input_buffer.clear()         # 같은 입력으로 연속 발동 방지
 
     def _start_counter(self):
-        """반격 자세 진입 (히트박스 없음). 0.5초 안에 맞으면 Match가 반격 처리."""
+        """반격 자세 진입 (히트박스 없음). 0.5초 안에 맞으면 Match가 반격 처리.
+
+        쿨타임은 창 종료 후에도 이어지도록 창+쿨타임 길이로 잡는다.
+        창이 만료될 때까지 아무도 안 맞으면 update()에서 실패 스턴을 건다.
+        """
         self.counter_timer = s.COUNTER_WINDOW
-        self.cooldown = s.COUNTER_WINDOW + s.COUNTER_COOLDOWN
+        self.counter_cd = s.COUNTER_WINDOW + s.COUNTER_COOLDOWN
         self.vx = 0.0
         self.input_buffer.clear()
 
@@ -192,8 +201,14 @@ class Fighter:
         # 타이머 감소
         if self.attack_timer > 0:
             self.attack_timer -= 1
+        if self.counter_cd > 0:
+            self.counter_cd -= 1
         if self.counter_timer > 0:
             self.counter_timer -= 1
+            # 반격 성공은 Match가 counter_timer를 즉시 0으로 만든다.
+            # 여기서 0에 도달했다면 = 아무도 안 맞음 = 반격 실패 → 자신이 경직.
+            if self.counter_timer == 0:
+                self.hitstun = max(self.hitstun, s.COUNTER_FAIL_STUN)
         if self.cooldown > 0:
             self.cooldown -= 1
         if self.hitstun > 0:
