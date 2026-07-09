@@ -4,7 +4,7 @@
 WIDTH = 960
 HEIGHT = 540
 FPS = 60
-TITLE = "2D Web Fight Game"
+TITLE = "민철권"
 
 # 물리 (Physics)
 GRAVITY = 0.8
@@ -120,11 +120,7 @@ SPECIAL_MOVES = [
 # 웅크리기 (Crouch)
 CROUCH_H = 74                   # 앉았을 때 몸통 높이 (기본 FIGHTER_H)
 
-# 반격기 (Counter / parry) - 뒤,뒤 + 공격
-COUNTER_MOVE = {
-    "name": "COUNTER",
-    "seq": ("back", "back"),
-}
+# 반격기 (Counter / parry) - 방어(G) 홀드 중 공격(F)
 COUNTER_WINDOW = 30             # 반격 자세 유지·판정 프레임 (0.5초 @ 60fps)
 COUNTER_COOLDOWN = 45           # 반격 종료 후 재사용 대기
 COUNTER_MULT = 1.5             # 되돌려주는 데미지 배율

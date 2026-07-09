@@ -124,27 +124,26 @@ class Fighter:
         del self.input_buffer[:-s.BUFFER_SIZE]
 
     def _try_attack(self, frame):
-        """상황(공중/앉기/커맨드)에 맞는 기술을 골라 시전한다.
+        """상황(방어중/공중/앉기/커맨드)에 맞는 기술을 골라 시전한다.
 
         우선순위:
-          1) 공중       → 점프킥 (오버헤드)
-          2) 커맨드 매치 → 특수기 (어퍼컷 등, 아래를 눌러도 커맨드가 우선)
-          3) 아래 홀드   → 로우킥
-          4) 그 외       → 기본 펀치
+          1) 지상 방어 홀드 중 공격 → 반격기 (공격 F + 방어 G 동시)
+          2) 공중               → 점프킥 (오버헤드)
+          3) 커맨드 매치         → 특수기 (어퍼컷 등, 아래를 눌러도 커맨드가 우선)
+          4) 아래 홀드           → 로우킥
+          5) 그 외               → 기본 펀치
         """
         if self.hitstun > 0 or self.is_ko or self.is_attacking or self.cooldown > 0:
             return
-        # 지상에서 방어 중엔 공격 불가 (공중엔 방어 개념이 없으므로 점프킥 허용)
-        if self.blocking and self.on_ground:
+
+        # 반격기: 지상에서 방어(G) 홀드 중 공격(F) → 히트박스 없는 반격 자세
+        if self.on_ground and self.blocking:
+            self._start_counter()
             return
 
         if not self.on_ground:
             move = s.AIR_MOVE
         else:
-            # 반격기 커맨드(뒤,뒤 + 공격)가 최우선 — 히트박스 없는 반격 자세로 진입
-            if self._buffer_ends_with(s.COUNTER_MOVE["seq"], frame):
-                self._start_counter()
-                return
             move = None
             for special in s.SPECIAL_MOVES:
                 if self._buffer_ends_with(special["seq"], frame):
