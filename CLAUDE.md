@@ -47,7 +47,7 @@ from game.game import Game
 - **`game/fighter.py` — `Fighter`** — 상태머신·물리·전투. P1/P2 동일 클래스. 입력은 pygame 키가 아닌 **액션 이름**("left"/"attack" 등)으로 받는다 — 키 → 액션 변환은 클라이언트(game.py의 CONTROLS, docs/game.js의 KEYMAP) 담당.
   - `render_state()` 가 그리기 도형(fist/guard/eye/flash 좌표)을 계산하는 **단일 출처** — 데스크톱 `draw()` 와 웹 전송 상태가 모두 이걸 쓴다. 외형 로직을 JS에 중복 구현하지 말 것.
 
-- **`server/server.py`** — websockets 기반 방(room) 서버. 방마다 Match를 60Hz로 실행(서버 권위 — 클라이언트는 입력만 전송). 프로토콜(JSON)은 파일 상단 docstring 참고. 브로드캐스트는 논블로킹 `websockets.asyncio.server.broadcast` 사용 — `await ws.send()` 루프로 바꾸면 느린 클라이언트가 방 전체를 멈춘다.
+- **`server/server.py`** — websockets 기반 방(room) 서버. 방마다 Match를 60Hz로 실행(서버 권위 — 클라이언트는 입력만 전송). 프로토콜(JSON)은 파일 상단 docstring 참고. 브로드캐스트는 논블로킹 `websockets.asyncio.server.broadcast` 사용 — `await ws.send()` 루프로 바꾸면 느린 클라이언트가 방 전체를 멈춘다. 인터넷 노출 서버라 DoS 방어(방/연결/메시지 상한·레이트리밋·`max_size`·Origin 검사, 상단 상수·env로 조정)를 둔다. **연결 핸들러는 반드시 모든 예외를 격리**(`except Exception`)해야 한다 — 한 연결의 오류(과대 메시지 등)가 새어나가면 서버가 새 연결을 못 받는 상태로 망가진다.
 
 - **`game/game.py` + `main.py`** — 데스크톱 클라이언트(렌더링 + 키 변환 + async 루프). `await asyncio.sleep(0)` 는 Pygbag 호환 잔재이자 관례로 유지.
 

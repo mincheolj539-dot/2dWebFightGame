@@ -36,7 +36,18 @@ from game.match import Match, ACTIONS
 ROOM_CODE_CHARS = string.ascii_uppercase
 FRAME_DT = 1.0 / s.FPS
 
+# 보안·자원 제한 (Security / resource limits) — 환경변수로 조정 가능.
+# 인터넷에 노출되는 서버이므로 DoS(방·연결·메시지 폭주)와 남용을 막는다.
+MAX_ROOMS = int(os.environ.get("MAX_ROOMS", "500"))          # 동시 방 상한
+MAX_CONNECTIONS = int(os.environ.get("MAX_CONNECTIONS", "400"))  # 동시 연결 상한
+MSG_RATE = float(os.environ.get("MSG_RATE", "120"))          # 연결당 초당 메시지 상한
+MAX_MSG_BYTES = 2048                                          # 수신 메시지 최대 크기
+# 허용 Origin(쉼표 구분). 미설정 시 모든 origin 허용(로컬 개발·테스트 호환).
+# 프로덕션에선 GitHub Pages 주소로 설정 권장: ALLOWED_ORIGINS=https://<id>.github.io
+ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+
 rooms = {}          # code -> Room
+connection_count = 0
 
 
 class Room:
@@ -110,27 +121,56 @@ def _new_room_code():
             return code
 
 
+def _valid_room_code(code):
+    return len(code) == 4 and code.isalpha() and code.isupper()
+
+
 async def handler(ws):
+    global connection_count
+    connection_count += 1
     room = None
     side = None
+    # 연결당 메시지 레이트 리미터 (토큰 버킷) — 플러딩 방지
+    loop = asyncio.get_event_loop()
+    tokens = MSG_RATE
+    last = loop.time()
+    strikes = 0                               # 연속 초과 횟수 (지속 폭주 시 연결 종료)
     try:
         async for raw in ws:
+            # 레이트 제한: 파싱 전에 검사해 폭주 시 처리 비용 자체를 차단
+            now = loop.time()
+            tokens = min(MSG_RATE, tokens + (now - last) * MSG_RATE)
+            last = now
+            if tokens < 1:
+                strikes += 1
+                if strikes > MSG_RATE:        # 지속적인 폭주 → 연결 끊어 부하 차단
+                    break
+                continue                      # 일시 초과분은 조용히 버림
+            strikes = 0
+            tokens -= 1
+
             try:
                 msg = json.loads(raw)
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                continue
+            if not isinstance(msg, dict):     # 배열/숫자 등 비정상 페이로드 차단
                 continue
 
             if room is None:
                 # 첫 메시지는 create 또는 join 이어야 함
                 t = msg.get("t")
                 if t == "create":
+                    if len(rooms) >= MAX_ROOMS:
+                        await ws.send(json.dumps(
+                            {"t": "error", "msg": "서버가 혼잡합니다. 잠시 후 다시 시도하세요"}))
+                        continue
                     code = _new_room_code()
                     room = Room(code)
                     rooms[code] = room
                     side = "P1"
                 elif t == "join":
                     code = str(msg.get("room", "")).upper()
-                    room = rooms.get(code)
+                    room = rooms.get(code) if _valid_room_code(code) else None
                     if room is None or room.full or room.closed:
                         await ws.send(json.dumps(
                             {"t": "error", "msg": "방을 찾을 수 없거나 가득 찼습니다"}))
@@ -144,23 +184,43 @@ async def handler(ws):
                 room.start_if_ready()
             else:
                 room.handle_message(side, msg)
-    except websockets.ConnectionClosed:
+    except Exception:
+        # 한 연결의 어떤 오류(연결 끊김·과대 메시지·프로토콜 위반 등)도
+        # 서버 전체나 다른 방에 영향을 주지 않도록 여기서 격리한다.
         pass
     finally:
+        connection_count -= 1
         if room is not None and side is not None:
             await room.remove(side)
 
 
-async def health_check(connection, request):
-    """Render 등의 HTTP 헬스체크에 응답 (WebSocket 업그레이드가 아닌 요청)."""
+async def process_request(connection, request):
+    """WebSocket 업그레이드 전 게이트: 헬스체크 응답 + Origin/연결수 검사."""
+    # 비 웹소켓 요청(헬스체크 등)에는 200 OK
     if request.headers.get("Upgrade", "").lower() != "websocket":
         return connection.respond(http.HTTPStatus.OK, "fight server OK\n")
+
+    # Origin 허용목록 검사 (설정된 경우만) — 타 사이트의 남용(CSWSH) 차단
+    if ALLOWED_ORIGINS:
+        origin = request.headers.get("Origin")
+        if origin not in ALLOWED_ORIGINS:
+            return connection.respond(http.HTTPStatus.FORBIDDEN, "forbidden origin\n")
+
+    # 동시 연결 수 상한 — 연결 폭주 DoS 방지
+    if connection_count >= MAX_CONNECTIONS:
+        return connection.respond(http.HTTPStatus.SERVICE_UNAVAILABLE, "server full\n")
+
     return None
 
 
 async def main():
     port = int(os.environ.get("PORT", 8765))
-    async with websockets.serve(handler, "0.0.0.0", port, process_request=health_check):
+    async with websockets.serve(
+        handler, "0.0.0.0", port,
+        process_request=process_request,
+        max_size=MAX_MSG_BYTES,           # 과대 메시지 거부 (기본 1MB → 축소)
+        max_queue=32,                     # 수신 큐 상한 (백프레셔)
+    ):
         print(f"fight server listening on :{port}")
         await asyncio.Future()            # 영원히 실행
 

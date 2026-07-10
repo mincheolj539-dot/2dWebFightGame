@@ -48,6 +48,21 @@ git add docs/config.js && git commit -m "Set production server URL" && git push
 - GitHub Pages는 https 이므로 서버 주소는 반드시 `wss://` (ws:// 는 브라우저가 차단).
 - 서버 주소를 임시로 바꿔 테스트하려면 URL 뒤에 `?server=wss://...` 를 붙이면 된다.
 
+## 보안 설정 (선택, 프로덕션 권장)
+서버는 기본적으로 방/연결/메시지 폭주(DoS)를 막는 제한이 켜져 있다. Render 대시보드의
+**Environment** 에서 아래 환경변수로 조정할 수 있다(모두 선택):
+
+| 변수 | 기본값 | 설명 |
+|------|:------:|------|
+| `ALLOWED_ORIGINS` | (없음=모두 허용) | 접속 허용 사이트. 내 페이지로 제한 권장: `https://<내아이디>.github.io` |
+| `MAX_ROOMS` | 500 | 동시 방 상한 |
+| `MAX_CONNECTIONS` | 400 | 동시 연결 상한 |
+| `MSG_RATE` | 120 | 연결당 초당 메시지 상한(초과 시 버리고, 지속되면 연결 종료) |
+
+- `ALLOWED_ORIGINS` 를 설정하면 다른 웹사이트가 내 서버를 무단 사용하는 것을 막는다
+  (여러 개는 쉼표로 구분). 미설정 시 모든 origin 허용 — 로컬 개발엔 편하지만
+  공개 서버라면 설정을 권장.
+
 ## 로컬에서 온라인 대전 테스트
 ```bash
 python server/server.py                    # 터미널 1: 대전 서버 (포트 8765)
