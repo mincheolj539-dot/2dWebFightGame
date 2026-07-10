@@ -56,6 +56,8 @@ from game.game import Game
 
 - **`game/settings.py`** — **모든 밸런스·색상·물리 상수의 단일 출처**. 기술 정의(`NORMAL_MOVE`, `CROUCH_MOVE`, `AIR_MOVE`, `SPECIAL_MOVES` — 각 dict에 damage/range/duration/active/cooldown/lunge/launch/stun/**level**)를 포함. 새 특수기 추가 = `SPECIAL_MOVES` 에 dict 하나 추가로 끝나야 정상 (서버·데스크톱 자동 반영, JS 수정 불필요).
 
+- **가드 게이지 & 가드 브레이크** — 방어에는 스태미나 게이지(`guard_gauge`, 0~`GUARD_MAX`)가 있다: 막으면 닳고(`GUARD_DRAIN`, 막을 때 `GUARD_CHIP` 추가 소모) 안 막으면 회복(`GUARD_REGEN`). 0이 되면 가드가 풀리고 잠긴다(`guard_locked`, `GUARD_RECOVER`까지 회복해야 재사용). 가드를 뗀 직후엔 `guard_cd`(`GUARD_RELEASE_CD`) 동안 재가드 불가(연타 방지). 게이지 로직은 `Fighter.handle_input`/`_regen_guard`. **가드 브레이크**: 가드 중 `guard_break` 플래그 기술(어퍼컷)에 맞으면 `Match._guard_break` 가 가드를 붕괴시키고 관통 데미지 + `GUARD_BREAK_STUN`(1초) 스턴 + 전용 이펙트(`kind:"guardbreak"`, 마젠타)를 낸다. HUD에 게이지 바가 그려진다(양 렌더러).
+
 - **반격기(Counter)** — 지상에서 **방어(G) 홀드 중 공격(F)** 으로 발동(`Fighter._start_counter`). 히트박스 없는 반격 자세(`counter_timer`, 0.5초)에 진입하고, 그 안에 맞으면 `Match._check_hit` 이 피해를 무효화하고 공격자에게 `COUNTER_MULT`(1.5)배를 반사한다. 발동 중 금색 오라로 표시(`render_state`의 `counter` 필드). 창이 아무도 안 맞고 만료되면(헛방) `Fighter.update` 가 `COUNTER_FAIL_STUN` 경직을 자신에게 건다(hitstun 재사용). 재사용 쿨타임은 `counter_cd`(창+`COUNTER_COOLDOWN`).
 
 - **스탠스 & 공격 레벨(철권식 이지선다)** — 공격은 컨텍스트로 선택된다(`Fighter._try_attack`): 방어 홀드 중→반격 자세, 공중→`AIR_MOVE`(점프킥), 커맨드 매치→특수기, 아래 홀드→`CROUCH_MOVE`(로우킥), 그 외→`NORMAL_MOVE`. 각 move의 `level`(mid/low/overhead)과 방어자 스탠스로 가드 성패를 `Match._is_blocked` 가 판정: 서서 막기=mid·overhead 방어, 앉아 막기=low 방어. 웅크리기(`crouching`, 아래 홀드+지상)는 걷기/점프를 막고 몸통 높이를 줄인다(`CROUCH_H`). 히트박스 y와 그리기 박스(`bx/by/bw/bh`)는 레벨·크라우치에 따라 `attack_hitbox`/`render_state` 가 계산한다.

@@ -144,6 +144,12 @@ class Match:
 
             direction = 1 if defender.center_x >= attacker.center_x else -1
             blocked = self._is_blocked(move, defender)
+
+            # 가드 브레이크: 가드 중 어퍼컷(guard_break 기술) 피격 → 가드 붕괴 + 1초 스턴
+            if blocked and move.get("guard_break"):
+                self._guard_break(attacker, defender, move, direction)
+                return
+
             defender.take_hit(move["damage"], direction, move["launch"],
                               move.get("stun"), blocked)
             big = move is not s.NORMAL_MOVE and move["level"] != "low"
@@ -152,11 +158,37 @@ class Match:
             impact_y = defender.y + s.FIGHTER_H * self._impact_frac(move["level"])
             self._spawn_spark(impact_x, impact_y, big and not blocked, blocked)
             if blocked:
+                # 막으면 가드 게이지 소모 (압박). 소진되면 가드가 풀린다(잠금).
+                defender.guard_gauge -= s.GUARD_CHIP
+                if defender.guard_gauge <= 0:
+                    defender.guard_gauge = 0
+                    defender.guard_locked = True
+                    defender.blocking = False
                 self.shake = max(self.shake, s.SHAKE_NORMAL // 2)
             else:
                 self.shake = max(self.shake, s.SHAKE_SPECIAL if big else s.SHAKE_NORMAL)
             if move is not s.NORMAL_MOVE and move["level"] != "low":
                 self.popup = (f"{attacker.name} {move['name']}!", s.FPS)
+
+    def _guard_break(self, attacker, defender, move, direction):
+        """가드 브레이크: 가드 붕괴, 관통 데미지, 1초 스턴, 전용 이펙트."""
+        defender.blocking = False
+        defender.guard_gauge = 0.0
+        defender.guard_locked = True
+        defender.guard_break_stun = s.GUARD_BREAK_STUN
+        defender.attack_timer = 0
+        defender.health = max(0.0, defender.health - move["damage"])
+        defender.vx = direction * s.KNOCKBACK
+        # 전용 이펙트 (히트 스파크와 구분되는 kind="guardbreak")
+        bx = defender.x + (0 if direction == 1 else s.FIGHTER_W)
+        by = defender.y + s.FIGHTER_H * 0.45
+        self.effects.append({
+            "x": int(bx), "y": int(by),
+            "life": s.SPARK_LIFE_BIG, "max": s.SPARK_LIFE_BIG,
+            "big": True, "block": False, "kind": "guardbreak",
+        })
+        self.shake = max(self.shake, s.SHAKE_SPECIAL)
+        self.popup = (f"{attacker.name} GUARD BREAK!", int(s.FPS * 1.2))
 
     @staticmethod
     def _is_blocked(move, defender):
@@ -183,6 +215,7 @@ class Match:
             "max": s.SPARK_LIFE_BIG if big else s.SPARK_LIFE,
             "big": big,
             "block": blocked,
+            "kind": "spark",
         })
 
     def _finish_round(self):
@@ -228,7 +261,7 @@ class Match:
             "popup": self.popup[0] if self.popup else None,
             "effects": [
                 {"x": e["x"], "y": e["y"], "t": e["life"] / e["max"],
-                 "big": e["big"], "block": e["block"]}
+                 "big": e["big"], "block": e["block"], "kind": e.get("kind", "spark")}
                 for e in self.effects
             ],
             "shake": self.shake,

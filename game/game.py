@@ -112,6 +112,9 @@ class Game:
         for e in effects:
             t = e["life"] / e["max"]        # 1.0 → 0.0 (raw effect 딕셔너리)
             grow = 1.0 - t                  # 진행도 (터질수록 확산)
+            if e.get("kind") == "guardbreak":
+                self._draw_guard_break(surface, e["x"], e["y"], t, grow)
+                continue
             blocked = e.get("block")
             spark_col = s.BLOCK_COLOR if blocked else s.SPARK_COLOR
             n = 10 if e["big"] else 7
@@ -131,6 +134,20 @@ class Game:
             pygame.draw.circle(surface, s.WHITE, (cx, cy), r)
             pygame.draw.circle(surface, spark_col, (cx, cy), r, 2)
 
+    def _draw_guard_break(self, surface, cx, cy, t, grow):
+        """가드 브레이크 전용 이펙트: 확산하는 마젠타 링 + 파편."""
+        ring_r = int(18 + grow * 46)
+        pygame.draw.circle(surface, s.GUARD_BREAK_COLOR, (cx, cy), ring_r, 4)
+        pygame.draw.circle(surface, s.WHITE, (cx, cy), max(2, ring_r - 8), 2)
+        for i in range(8):
+            ang = math.pi * i / 4 + grow * 0.5
+            d = 14 + grow * 40
+            x2 = cx + int(math.cos(ang) * d)
+            y2 = cy + int(math.sin(ang) * d)
+            pygame.draw.line(surface, s.GUARD_BREAK_COLOR,
+                             (cx + int(math.cos(ang) * 10), cy + int(math.sin(ang) * 10)),
+                             (x2, y2), 3)
+
     def _draw_hud(self):
         m = self.match
 
@@ -138,11 +155,15 @@ class Game:
         self._draw_health_bar(m.p1, x=30, align_left=True)
         self._draw_health_bar(m.p2, x=s.WIDTH - 30 - 360, align_left=False)
 
+        # 가드 게이지 (체력바 아래 얇은 바)
+        self._draw_guard_gauge(m.p1, x=30, align_left=True)
+        self._draw_guard_gauge(m.p2, x=s.WIDTH - 30 - 360, align_left=False)
+
         # 이름 & 승수
         n1 = self.font_small.render(f"P1  {'●' * m.wins['P1']}", True, s.WHITE)
         n2 = self.font_small.render(f"{'●' * m.wins['P2']}  P2", True, s.WHITE)
-        self.screen.blit(n1, (30, 58))
-        self.screen.blit(n2, (s.WIDTH - 30 - n2.get_width(), 58))
+        self.screen.blit(n1, (30, 66))
+        self.screen.blit(n2, (s.WIDTH - 30 - n2.get_width(), 66))
 
         # 타이머
         seconds = max(0, m.round_frames // s.FPS)
@@ -166,6 +187,18 @@ class Game:
                 pygame.draw.rect(self.screen, color, (x, y, fill_w, h), border_radius=4)
             else:
                 pygame.draw.rect(self.screen, color, (x + w - fill_w, y, fill_w, h), border_radius=4)
+
+    def _draw_guard_gauge(self, fighter, x, align_left):
+        w, h, y = 360, 6, 53
+        pygame.draw.rect(self.screen, s.BLACK, (x - 2, y - 2, w + 4, h + 4), border_radius=3)
+        pygame.draw.rect(self.screen, s.GREY, (x, y, w, h), border_radius=2)
+        ratio = max(0.0, min(1.0, fighter.guard_gauge / s.GUARD_MAX))
+        fill_w = int(w * ratio)
+        # 잠기면(가드 불가) 빨강, 낮으면 빨강, 평소 파랑
+        color = s.GUARD_GAUGE_LOW if (fighter.guard_locked or ratio < 0.25) else s.GUARD_GAUGE_COLOR
+        if fill_w > 0:
+            gx = x if align_left else x + w - fill_w
+            pygame.draw.rect(self.screen, color, (gx, y, fill_w, h), border_radius=2)
 
     def _draw_center_text(self, title, subtitle):
         overlay = pygame.Surface((s.WIDTH, s.HEIGHT), pygame.SRCALPHA)

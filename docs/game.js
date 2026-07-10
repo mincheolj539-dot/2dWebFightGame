@@ -17,6 +17,7 @@ const COLORS = {
   attack: "rgb(255,220,120)", block: "rgb(120,220,255)",
   spark: "rgb(255,240,190)", hurtRay: "255,235,150",
   counter: "rgb(255,220,70)",
+  guardGauge: "rgb(120,220,255)", guardLow: "rgb(255,120,90)", guardBreak: "rgb(255,80,170)",
 };
 const HIT_STUN = 14, SHAKE_MAG = 9, SHAKE_SPECIAL = 14;  // settings.py와 동기화
 
@@ -186,8 +187,10 @@ function drawFighter(f, color, accent) {
     roundRect(bx - 8, by - 8, bw + 16, bh + 16, 12);
     ctx.fill();
   }
-  // 몸통
-  ctx.fillStyle = f.flash ? COLORS.white : color;
+  // 몸통 (가드 브레이크 스턴 중엔 마젠타로 깜빡)
+  const gb = f.guard_break || 0;
+  if (gb > 0 && Math.floor(gb / 4) % 2 === 0) ctx.fillStyle = COLORS.guardBreak;
+  else ctx.fillStyle = f.flash ? COLORS.white : color;
   roundRect(bx, by, bw, bh, 8);
   ctx.fill();
   ctx.strokeStyle = accent;
@@ -199,6 +202,13 @@ function drawFighter(f, color, accent) {
     ctx.strokeStyle = COLORS.spark;
     ctx.lineWidth = 3;
     roundRect(bx - 3, by - 3, bw + 6, bh + 6, 10);
+    ctx.stroke();
+  }
+  // 가드 브레이크 마젠타 외곽선
+  if (gb > 0) {
+    ctx.strokeStyle = COLORS.guardBreak;
+    ctx.lineWidth = 3;
+    roundRect(bx - 5, by - 5, bw + 10, bh + 10, 12);
     ctx.stroke();
   }
   // 반격 자세 금색 외곽선
@@ -243,6 +253,21 @@ function drawHealthBar(health, x, alignLeft) {
   }
 }
 
+function drawGuardGauge(f, x, alignLeft) {
+  const w = 360, h = 6, y = 53;
+  ctx.fillStyle = COLORS.black;
+  roundRect(x - 2, y - 2, w + 4, h + 4, 3); ctx.fill();
+  ctx.fillStyle = COLORS.grey;
+  roundRect(x, y, w, h, 2); ctx.fill();
+  const ratio = Math.max(0, Math.min(1, f.guard_gauge || 0));  // 0..1 (서버 계산)
+  const fillW = Math.floor(w * ratio);
+  if (fillW > 0) {
+    ctx.fillStyle = (f.guard_locked || ratio < 0.25) ? COLORS.guardLow : COLORS.guardGauge;
+    roundRect(alignLeft ? x : x + w - fillW, y, fillW, h, 2);
+    ctx.fill();
+  }
+}
+
 function drawCenterText(title, subtitle) {
   ctx.fillStyle = "rgba(0,0,0,0.47)";
   ctx.fillRect(0, 0, W, H);
@@ -269,10 +294,29 @@ function drawWorld() {
   ctx.stroke();
 }
 
+function drawGuardBreak(e, grow) {
+  // 가드 브레이크 전용: 확산하는 마젠타 링 + 파편
+  const ringR = 18 + grow * 46;
+  ctx.strokeStyle = COLORS.guardBreak; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.arc(e.x, e.y, ringR, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = COLORS.white; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(e.x, e.y, Math.max(2, ringR - 8), 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = COLORS.guardBreak; ctx.lineWidth = 3;
+  for (let i = 0; i < 8; i++) {
+    const ang = Math.PI * i / 4 + grow * 0.5;
+    const d = 14 + grow * 40;
+    ctx.beginPath();
+    ctx.moveTo(e.x + Math.cos(ang) * 10, e.y + Math.sin(ang) * 10);
+    ctx.lineTo(e.x + Math.cos(ang) * d, e.y + Math.sin(ang) * d);
+    ctx.stroke();
+  }
+}
+
 function drawEffects(effects) {
   // 임팩트 스파크: 방사형 선 + 중심 원 (수명에 따라 커지며 사라짐)
   for (const e of effects) {
     const grow = 1 - e.t;
+    if (e.kind === "guardbreak") { drawGuardBreak(e, grow); continue; }
     const sparkCol = e.block ? COLORS.block : COLORS.spark;  // 가드 시 파란 스파크
     const n = e.big ? 10 : 7;
     const base = e.big ? 34 : 22;
@@ -323,6 +367,8 @@ function draw() {
   // HUD
   drawHealthBar(f1.health, 30, true);
   drawHealthBar(f2.health, W - 30 - 360, false);
+  drawGuardGauge(f1, 30, true);
+  drawGuardGauge(f2, W - 30 - 360, false);
   ctx.fillStyle = COLORS.white;
   ctx.font = "bold 18px Consolas, monospace";
   ctx.textAlign = "left";

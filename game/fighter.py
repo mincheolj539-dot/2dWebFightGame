@@ -35,6 +35,11 @@ class Fighter:
         self.blocking = False
         self.crouching = False            # 웅크리기 (아래 홀드, 지상)
         self.holding_down = False         # 아래 키 눌림 상태 (공격 시 로우킥 판정용)
+        self.guard_gauge = float(s.GUARD_MAX)  # 가드 게이지 (0이면 가드 불가)
+        self.guard_locked = False         # 게이지 소진으로 가드 잠김 (회복 대기)
+        self.guard_cd = 0                 # 가드 해제 후 재가드 쿨타임 (연타 방지)
+        self.was_blocking = False         # 직전 프레임 방어 여부 (해제 감지용)
+        self.guard_break_stun = 0         # 가드 브레이크 스턴 남은 프레임
         self.counter_timer = 0            # 반격 자세 남은 프레임 (>0이면 반격 판정)
         self.counter_cd = 0               # 반격 재사용 쿨타임 남은 프레임
         self.dash_timer = 0               # 대시 남은 프레임 (>0이면 대시 이동 중)
@@ -70,10 +75,12 @@ class Fighter:
         """눌림 상태 액션 딕셔너리로 이동/점프/방어/웅크리기를 처리한다 (연속 입력)."""
         self.holding_down = actions["down"]
 
-        # 경직 중이거나 KO면 입력 무시
-        if self.hitstun > 0 or self.is_ko:
+        # 경직/가드브레이크 스턴/KO면 입력 무시 (가드 게이지는 회복만)
+        if self.hitstun > 0 or self.guard_break_stun > 0 or self.is_ko:
             self.blocking = False
             self.crouching = False
+            self.was_blocking = False
+            self._regen_guard()
             return
 
         # 대시 중이면 대시 속도로 이동 (공격 중이 아닐 때). 걷기/방어/웅크리기 무시.
@@ -92,8 +99,22 @@ class Fighter:
             and (not self.is_attacking or self.move is s.CROUCH_MOVE)
         )
 
-        # 방어: 방어 중에는 이동 불가. 아래+방어 = 앉아 막기(crouching과 공존).
-        self.blocking = actions["block"] and self.on_ground
+        # 방어(가드 게이지): 게이지가 있고 잠기지 않고 쿨타임이 아닐 때만 가드 가능.
+        # 홀드하면 게이지가 닳고, 소진되면 가드가 풀린다. 뗀 직후엔 잠깐 재가드 불가(연타 방지).
+        want_block = actions["block"] and self.on_ground
+        self.blocking = (want_block and self.guard_gauge >= 1
+                         and not self.guard_locked and self.guard_cd == 0)
+        if self.blocking:
+            self.guard_gauge -= s.GUARD_DRAIN
+            if self.guard_gauge <= 0:          # 게이지 소진 → 가드 풀림 + 잠금
+                self.guard_gauge = 0
+                self.guard_locked = True
+                self.blocking = False
+        else:
+            self._regen_guard()
+        if self.was_blocking and not self.blocking:   # 가드 해제 → 재가드 쿨타임
+            self.guard_cd = s.GUARD_RELEASE_CD
+        self.was_blocking = self.blocking
 
         if not self.blocking and not self.crouching and not self.is_attacking:
             if actions["left"]:
@@ -114,6 +135,12 @@ class Fighter:
 
         # 공격은 이산 입력(on_keydown)에서 처리한다.
         # 커맨드(연속 방향 입력) 판정에는 눌림 상태가 아니라 이산 입력이 필요하기 때문.
+
+    def _regen_guard(self):
+        """가드 게이지 회복. 소진 잠금은 충분히 회복되면 해제."""
+        self.guard_gauge = min(float(s.GUARD_MAX), self.guard_gauge + s.GUARD_REGEN)
+        if self.guard_locked and self.guard_gauge >= s.GUARD_RECOVER:
+            self.guard_locked = False
 
     # ---- 커맨드 입력 (Command inputs) ----
     def on_keydown(self, action, frame):
@@ -157,7 +184,8 @@ class Fighter:
           4) 아래 홀드           → 로우킥
           5) 그 외               → 기본 펀치
         """
-        if self.hitstun > 0 or self.is_ko or self.is_attacking or self.cooldown > 0:
+        if (self.hitstun > 0 or self.guard_break_stun > 0 or self.is_ko
+                or self.is_attacking or self.cooldown > 0):
             return
         if self.counter_active:           # 이미 반격 자세면 재입력 무시
             return
@@ -236,6 +264,10 @@ class Fighter:
                 self.hitstun = max(self.hitstun, s.COUNTER_FAIL_STUN)
         if self.cooldown > 0:
             self.cooldown -= 1
+        if self.guard_cd > 0:
+            self.guard_cd -= 1
+        if self.guard_break_stun > 0:
+            self.guard_break_stun -= 1
         if self.hitstun > 0:
             self.hitstun -= 1
             # 경직 중 넉백 감쇠
@@ -244,8 +276,9 @@ class Fighter:
             self.vx *= 0.8
 
     def face(self, opponent):
-        """항상 상대를 바라보도록 방향 갱신 (공중/공격 중에는 고정)."""
-        if self.on_ground and not self.is_attacking and self.hitstun == 0:
+        """항상 상대를 바라보도록 방향 갱신 (공중/공격/경직 중에는 고정)."""
+        if (self.on_ground and not self.is_attacking
+                and self.hitstun == 0 and self.guard_break_stun == 0):
             self.facing = 1 if opponent.center_x >= self.center_x else -1
 
     # ---- 전투 (Combat) ----
@@ -322,6 +355,9 @@ class Fighter:
             "flash": self.hitstun > 0 and (self.hitstun // 2) % 2 == 0,
             "hurt": max(0, self.hitstun),   # 피격 경직 남은 프레임 (내리쬐는 광선 강도)
             "counter": max(0, self.counter_timer),  # 반격 자세 남은 프레임 (>0이면 빛남)
+            "guard_gauge": max(0.0, self.guard_gauge / s.GUARD_MAX),  # 0..1 (HUD 바)
+            "guard_locked": self.guard_locked,
+            "guard_break": max(0, self.guard_break_stun),  # 가드 브레이크 스턴 남은 프레임
             "eye": (int(self.center_x + self.facing * 12), by + int(bh * 0.30)),
             "fist": None,
             "guard": None,
@@ -367,7 +403,12 @@ class Fighter:
             pygame.draw.rect(surface, s.COUNTER_COLOR, body.inflate(16, 16),
                              border_radius=12)
 
-        color = s.WHITE if st["flash"] else self.color
+        # 가드 브레이크 스턴: 몸통을 마젠타로 깜빡 (무방비 표시)
+        gb = st["guard_break"]
+        if gb > 0 and (gb // 4) % 2 == 0:
+            color = s.GUARD_BREAK_COLOR
+        else:
+            color = s.WHITE if st["flash"] else self.color
         pygame.draw.rect(surface, color, body, border_radius=8)
         pygame.draw.rect(surface, self.accent, body, width=3, border_radius=8)
 
@@ -375,6 +416,10 @@ class Fighter:
         if st["hurt"] > 0:
             pygame.draw.rect(surface, s.SPARK_COLOR, body.inflate(6, 6),
                              width=3, border_radius=10)
+        # 가드 브레이크 마젠타 외곽선
+        if gb > 0:
+            pygame.draw.rect(surface, s.GUARD_BREAK_COLOR, body.inflate(10, 10),
+                             width=3, border_radius=12)
         # 반격 자세 금색 외곽선
         if st["counter"] > 0:
             pygame.draw.rect(surface, s.COUNTER_COLOR, body.inflate(8, 8),
