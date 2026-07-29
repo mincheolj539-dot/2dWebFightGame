@@ -151,7 +151,6 @@ HEALTH_LOW = (230, 80, 80)
 ATTACK_COLOR = (255, 220, 120)
 BLOCK_COLOR = (120, 220, 255)
 SPARK_COLOR = (255, 240, 190)   # 임팩트 스파크
-HURT_RAY_COLOR = (255, 235, 150)  # 피격자에게 내리쬐는 광선
 COUNTER_COLOR = (255, 220, 70)  # 반격 자세 빛남 (금색)
 GUARD_GAUGE_COLOR = (120, 220, 255)  # 가드 게이지 (파랑)
 GUARD_GAUGE_LOW = (255, 120, 90)     # 가드 게이지 부족/락 (빨강)

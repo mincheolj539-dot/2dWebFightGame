@@ -15,11 +15,11 @@ const COLORS = {
   p2: "rgb(240,90,90)", p2Accent: "rgb(255,160,160)",
   healthGood: "rgb(80,210,110)", healthLow: "rgb(230,80,80)",
   attack: "rgb(255,220,120)", block: "rgb(120,220,255)",
-  spark: "rgb(255,240,190)", hurtRay: "255,235,150",
+  spark: "rgb(255,240,190)",
   counter: "rgb(255,220,70)",
   guardGauge: "rgb(120,220,255)", guardLow: "rgb(255,120,90)", guardBreak: "rgb(255,80,170)",
 };
-const HIT_STUN = 14, SHAKE_MAG = 9, SHAKE_SPECIAL = 14;  // settings.py와 동기화
+const SHAKE_MAG = 9, SHAKE_SPECIAL = 14;  // settings.py와 동기화
 
 // ---- 키 → 액션 매핑 (혼자 플레이하므로 WASD와 방향키 둘 다 자신에게 매핑) ----
 const KEYMAP = {
@@ -159,28 +159,9 @@ function roundRect(x, y, w, h, r) {
   ctx.roundRect(x, y, w, h, r);
 }
 
-function drawHurtRays(f) {
-  // 피격자 위에서 아래로 내리쬐는 반투명 광선 3줄
-  const alpha = 0.6 * Math.min(1, f.hurt / HIT_STUN);
-  const cx = f.x + FIGHTER_W / 2;
-  const top = Math.max(0, f.y - 120);
-  ctx.fillStyle = "rgba(" + COLORS.hurtRay + "," + alpha + ")";
-  for (const off of [-18, 0, 18]) {
-    ctx.beginPath();
-    ctx.moveTo(cx + off - 3, top);
-    ctx.lineTo(cx + off + 3, top);
-    ctx.lineTo(cx + off + 12, f.y + 20);
-    ctx.lineTo(cx + off - 12, f.y + 20);
-    ctx.closePath();
-    ctx.fill();
-  }
-}
-
 function drawFighter(f, color, accent) {
   // 몸통 박스 (웅크리면 높이가 줄고 발은 바닥에 유지) — 서버가 계산한 bx/by/bw/bh 사용
   const bx = f.bx, by = f.by, bw = f.bw, bh = f.bh;
-  // 피격 시 내리쬐는 광선 (몸통보다 먼저 그려 뒤에 깔리게)
-  if (f.hurt > 0) drawHurtRays(f);
   // 반격 자세: 몸통 뒤에 금색 오라 (깜빡임)
   if (f.counter > 0 && Math.floor(f.counter / 3) % 2 === 0) {
     ctx.fillStyle = COLORS.counter;
@@ -313,29 +294,22 @@ function drawGuardBreak(e, grow) {
 }
 
 function drawEffects(effects) {
-  // 임팩트 스파크: 방사형 선 + 중심 원 (수명에 따라 커지며 사라짐)
+  // 임팩트: 맞은 자리에 확산하는 링 + 밝은 원 (동그란 타격 이펙트)
   for (const e of effects) {
     const grow = 1 - e.t;
     if (e.kind === "guardbreak") { drawGuardBreak(e, grow); continue; }
-    const sparkCol = e.block ? COLORS.block : COLORS.spark;  // 가드 시 파란 스파크
-    const n = e.big ? 10 : 7;
-    const base = e.big ? 34 : 22;
-    const length = base * (0.4 + grow);
-    const inner = base * 0.3 * (0.4 + grow);
-    ctx.strokeStyle = sparkCol;
-    ctx.lineWidth = e.big ? 4 : 3;
-    for (let i = 0; i < n; i++) {
-      const ang = (2 * Math.PI * i / n) + grow;
-      ctx.beginPath();
-      ctx.moveTo(e.x + Math.cos(ang) * inner, e.y + Math.sin(ang) * inner);
-      ctx.lineTo(e.x + Math.cos(ang) * length, e.y + Math.sin(ang) * length);
-      ctx.stroke();
+    const sparkCol = e.block ? COLORS.block : COLORS.spark;  // 가드 시 파란색
+    const base = e.big ? 16 : 11;
+    const ringR = base * (0.5 + grow * 1.4);
+    ctx.strokeStyle = sparkCol; ctx.lineWidth = e.big ? 4 : 3;
+    ctx.beginPath(); ctx.arc(e.x, e.y, ringR, 0, Math.PI * 2); ctx.stroke();
+    const core = base * (0.4 + e.t * 0.7);
+    if (core > 0) {
+      ctx.fillStyle = COLORS.white;
+      ctx.beginPath(); ctx.arc(e.x, e.y, core, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = sparkCol; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(e.x, e.y, core, 0, Math.PI * 2); ctx.stroke();
     }
-    const r = (e.big ? 10 : 7) * (0.5 + e.t);
-    ctx.fillStyle = COLORS.white;
-    ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = sparkCol; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(e.x, e.y, r, 0, Math.PI * 2); ctx.stroke();
   }
 }
 

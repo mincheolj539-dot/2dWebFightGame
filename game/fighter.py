@@ -394,10 +394,6 @@ class Fighter:
         st = self.render_state()
         body = pygame.Rect(st["bx"], st["by"], st["bw"], st["bh"])
 
-        # 피격 시 위에서 내리쬐는 광선 (몸통보다 먼저 그려 뒤에 깔리게)
-        if st["hurt"] > 0:
-            self._draw_hurt_rays(surface, st["hurt"])
-
         # 반격 자세: 몸통 뒤에 금색 오라 (깜빡임)
         if st["counter"] > 0 and (st["counter"] // 3) % 2 == 0:
             pygame.draw.rect(surface, s.COUNTER_COLOR, body.inflate(16, 16),
@@ -438,20 +434,3 @@ class Fighter:
             g = st["guard"]
             pygame.draw.rect(surface, s.BLOCK_COLOR,
                              (g["x"], g["y"], g["w"], g["h"]), border_radius=4)
-
-    def _draw_hurt_rays(self, surface, hurt):
-        """피격자 위에서 아래로 내리쬐는 반투명 광선 3줄 (경직 동안 반짝임)."""
-        alpha = int(150 * min(1.0, hurt / s.HIT_STUN))
-        ray = pygame.Surface((s.WIDTH, s.HEIGHT), pygame.SRCALPHA)
-        cx = int(self.center_x)
-        top = max(0, int(self.y) - 120)
-        for off in (-18, 0, 18):
-            # 위는 좁고 아래로 퍼지는 광선 (스포트라이트 느낌)
-            pts = [
-                (cx + off - 3, top),
-                (cx + off + 3, top),
-                (cx + off + 12, int(self.y) + 20),
-                (cx + off - 12, int(self.y) + 20),
-            ]
-            pygame.draw.polygon(ray, (*s.HURT_RAY_COLOR, alpha), pts)
-        surface.blit(ray, (0, 0))

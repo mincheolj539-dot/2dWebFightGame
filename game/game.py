@@ -117,22 +117,15 @@ class Game:
                 continue
             blocked = e.get("block")
             spark_col = s.BLOCK_COLOR if blocked else s.SPARK_COLOR
-            n = 10 if e["big"] else 7
-            base = (34 if e["big"] else 22)
-            length = int(base * (0.4 + grow))
-            inner = int(base * 0.3 * (0.4 + grow))
-            width = 4 if e["big"] else 3
             cx, cy = e["x"], e["y"]
-            for i in range(n):
-                ang = (2 * math.pi * i / n) + grow
-                x2 = cx + int(math.cos(ang) * length)
-                y2 = cy + int(math.sin(ang) * length)
-                x1 = cx + int(math.cos(ang) * inner)
-                y1 = cy + int(math.sin(ang) * inner)
-                pygame.draw.line(surface, spark_col, (x1, y1), (x2, y2), width)
-            r = int((10 if e["big"] else 7) * (0.5 + t))
-            pygame.draw.circle(surface, s.WHITE, (cx, cy), r)
-            pygame.draw.circle(surface, spark_col, (cx, cy), r, 2)
+            base = 16 if e["big"] else 11
+            # 확산하는 링 + 중심의 밝은 원 (동그란 임팩트)
+            ring_r = int(base * (0.5 + grow * 1.4))
+            pygame.draw.circle(surface, spark_col, (cx, cy), ring_r, 4 if e["big"] else 3)
+            core = int(base * (0.4 + t * 0.7))
+            if core > 0:
+                pygame.draw.circle(surface, s.WHITE, (cx, cy), core)
+                pygame.draw.circle(surface, spark_col, (cx, cy), core, 2)
 
     def _draw_guard_break(self, surface, cx, cy, t, grow):
         """가드 브레이크 전용 이펙트: 확산하는 마젠타 링 + 파편."""
