@@ -5,6 +5,8 @@
 이 클래스는 데스크톱/서버 어디서든 동일하게 동작한다.
 """
 
+import math
+
 import pygame
 
 from . import settings as s
@@ -47,6 +49,7 @@ class Fighter:
         self.has_hit = False              # 이번 공격이 이미 명중했는지 (다단히트 방지)
         self.move = s.NORMAL_MOVE         # 현재/마지막 시전한 기술
         self.input_buffer = []            # [(frame, token)] - 커맨드 판정용 최근 방향 입력
+        self.anim_t = 0                   # 애니메이션 프레임 카운터 (걷기/대기 사이클)
 
     # ---- 파생 속성 (Derived properties) ----
     @property
@@ -234,6 +237,7 @@ class Fighter:
 
     # ---- 상태 갱신 (Update) ----
     def update(self):
+        self.anim_t += 1
         # 중력
         self.vy += s.GRAVITY
         self.x += self.vx
@@ -387,44 +391,142 @@ class Fighter:
         if self.blocking:
             gx = int(self.x + s.FIGHTER_W) if self.facing == 1 else int(self.x - 8)
             st["guard"] = {"x": gx, "y": by + int(bh * 0.18), "w": 8, "h": int(bh * 0.6)}
+        # 관절 골격 (머리·몸통·팔·다리) — 동작에 따라 포즈가 바뀐다
+        self._pose(st)
         return st
+
+    def _pose(self, st):
+        """동작별 스틱 캐릭터 골격을 계산해 st["skel"] 에 채운다.
+
+        모든 좌표는 절대 화면 좌표. 데스크톱/웹 렌더러가 이 점들을 그대로 그린다.
+        """
+        bx, by, bw, bh = st["bx"], st["by"], st["bw"], st["bh"]
+        fdir = self.facing
+        cx = bx + bw // 2
+        bottom = by + bh
+
+        head_r = max(9, round(bh * 0.13))
+        head_cy = by + head_r + 2
+        sh_y = head_cy + head_r
+        hip_y = by + round(bh * 0.55)
+        sh_dx = round(bw * 0.15)
+        hip_dx = round(bw * 0.13)
+
+        front_sh = (cx + fdir * sh_dx, sh_y)
+        back_sh = (cx - fdir * sh_dx, sh_y)
+        front_hip = (cx + fdir * hip_dx, hip_y)
+        back_hip = (cx - fdir * hip_dx, hip_y)
+
+        # ---- 다리 ----
+        walking = self.on_ground and abs(self.vx) > 0.6 and not self.is_attacking
+        if not self.on_ground:                      # 공중: 다리 오므림
+            ff = (cx + fdir * round(bw * 0.16), hip_y + round(bh * 0.22))
+            bf = (cx - fdir * round(bw * 0.08), hip_y + round(bh * 0.26))
+        elif walking:                               # 걷기: 발 번갈아 스윙
+            ph = self.anim_t * 0.4
+            ff = (cx + fdir * round(bw * 0.14 + math.sin(ph) * bw * 0.22),
+                  bottom - round(max(0.0, math.sin(ph)) * bh * 0.07))
+            bf = (cx - fdir * round(bw * 0.14 - math.sin(ph) * bw * 0.22),
+                  bottom - round(max(0.0, -math.sin(ph)) * bh * 0.07))
+        else:                                       # 대기: 벌린 스탠스
+            ff = (cx + fdir * round(bw * 0.26), bottom)
+            bf = (cx - fdir * round(bw * 0.20), bottom)
+
+        def bend(a, b, out, down):
+            return (int((a[0] + b[0]) / 2 + fdir * out), int((a[1] + b[1]) / 2 + down))
+
+        leg_f = [front_hip, bend(front_hip, ff, bw * 0.10, 0), (int(ff[0]), int(ff[1]))]
+        leg_b = [back_hip, bend(back_hip, bf, bw * 0.06, 0), (int(bf[0]), int(bf[1]))]
+
+        # ---- 팔 ----
+        if self.hitstun > 0:                        # 피격: 팔 뒤로 젖힘
+            hand_f = (cx - fdir * round(bw * 0.04), sh_y - round(bh * 0.03))
+            hand_b = (cx - fdir * round(bw * 0.22), sh_y + round(bh * 0.02))
+        elif self.blocking:                         # 가드: 두 팔 앞으로 모음
+            hand_f = (cx + fdir * round(bw * 0.30), sh_y + round(bh * 0.02))
+            hand_b = (cx + fdir * round(bw * 0.16), sh_y + round(bh * 0.08))
+        else:                                       # 대기/걷기: 기본 가드 자세
+            hand_f = (cx + fdir * round(bw * 0.34), sh_y + round(bh * 0.09))
+            hand_b = (cx + fdir * round(bw * 0.10), sh_y + round(bh * 0.13))
+
+        # 공격: 펀치면 앞손이, 킥이면 앞발이 타격점(fist)까지 뻗는다
+        is_kick = False
+        if self.is_attacking and st["fist"]:
+            tgt = (st["fist"]["x"], st["fist"]["y"])
+            lvl = self.move["level"]
+            if lvl in ("low", "overhead"):          # 로우킥/점프킥 = 발차기
+                is_kick = True
+                leg_f = [front_hip, bend(front_hip, tgt, bw * 0.05, 0),
+                         (int(tgt[0]), int(tgt[1]))]
+            else:                                   # 펀치/대시펀치/어퍼컷 = 주먹
+                hand_f = tgt
+
+        arm_f = [front_sh, bend(front_sh, hand_f, 0, round(bh * 0.05)),
+                 (int(hand_f[0]), int(hand_f[1]))]
+        arm_b = [back_sh, bend(back_sh, hand_b, 0, round(bh * 0.05)),
+                 (int(hand_b[0]), int(hand_b[1]))]
+
+        st["skel"] = {
+            "head": [cx, head_cy, head_r],
+            "torso": [list(back_sh), list(front_sh), list(front_hip), list(back_hip)],
+            "arm_f": [list(map(int, p)) for p in arm_f],
+            "arm_b": [list(map(int, p)) for p in arm_b],
+            "leg_f": [list(map(int, p)) for p in leg_f],
+            "leg_b": [list(map(int, p)) for p in leg_b],
+            "lw": max(4, round(bw * 0.13)),
+            "joint": max(3, round(bw * 0.09)),
+            "kick": is_kick,
+        }
+        # 눈은 머리 위로 이동
+        st["eye"] = (cx + fdir * round(head_r * 0.45), head_cy)
 
     # ---- 렌더링 (Draw) ----
     def draw(self, surface):
         st = self.render_state()
         body = pygame.Rect(st["bx"], st["by"], st["bw"], st["bh"])
+        sk = st["skel"]
 
-        # 반격 자세: 몸통 뒤에 금색 오라 (깜빡임)
+        # 상태 오라 (몸 뒤에 먼저 깔림)
         if st["counter"] > 0 and (st["counter"] // 3) % 2 == 0:
-            pygame.draw.rect(surface, s.COUNTER_COLOR, body.inflate(16, 16),
-                             border_radius=12)
-
-        # 가드 브레이크 스턴: 몸통을 마젠타로 깜빡 (무방비 표시)
+            pygame.draw.rect(surface, s.COUNTER_COLOR, body.inflate(16, 16), border_radius=14)
         gb = st["guard_break"]
         if gb > 0 and (gb // 4) % 2 == 0:
             color = s.GUARD_BREAK_COLOR
         else:
             color = s.WHITE if st["flash"] else self.color
-        pygame.draw.rect(surface, color, body, border_radius=8)
-        pygame.draw.rect(surface, self.accent, body, width=3, border_radius=8)
 
-        # 피격 중 밝은 외곽 글로우
+        lw = sk["lw"]
+        jr = sk["joint"]
+
+        def limb(pts):
+            pygame.draw.lines(surface, color, False, pts, lw)
+            for p in pts:
+                pygame.draw.circle(surface, color, p, lw // 2)
+            pygame.draw.circle(surface, self.accent, pts[-1], jr)  # 손/발 강조
+
+        # 뒤쪽 팔·다리 → 몸통 → 머리 → 앞쪽 다리·팔 (깊이감)
+        limb(sk["arm_b"])
+        limb(sk["leg_b"])
+        pygame.draw.polygon(surface, color, sk["torso"])
+        pygame.draw.polygon(surface, self.accent, sk["torso"], width=2)
+        hx, hy, hr = sk["head"]
+        pygame.draw.circle(surface, color, (hx, hy), hr)
+        pygame.draw.circle(surface, self.accent, (hx, hy), hr, 2)
+        limb(sk["leg_f"])
+        limb(sk["arm_f"])
+
+        # 상태 외곽선
         if st["hurt"] > 0:
-            pygame.draw.rect(surface, s.SPARK_COLOR, body.inflate(6, 6),
-                             width=3, border_radius=10)
-        # 가드 브레이크 마젠타 외곽선
+            pygame.draw.rect(surface, s.SPARK_COLOR, body.inflate(6, 6), width=2, border_radius=10)
         if gb > 0:
-            pygame.draw.rect(surface, s.GUARD_BREAK_COLOR, body.inflate(10, 10),
-                             width=3, border_radius=12)
-        # 반격 자세 금색 외곽선
+            pygame.draw.rect(surface, s.GUARD_BREAK_COLOR, body.inflate(10, 10), width=3, border_radius=12)
         if st["counter"] > 0:
-            pygame.draw.rect(surface, s.COUNTER_COLOR, body.inflate(8, 8),
-                             width=3, border_radius=11)
+            pygame.draw.rect(surface, s.COUNTER_COLOR, body.inflate(8, 8), width=3, border_radius=11)
 
-        # 눈 (바라보는 방향 표시)
-        pygame.draw.circle(surface, s.BLACK, st["eye"], 5)
+        # 눈
+        pygame.draw.circle(surface, s.BLACK, st["eye"], max(3, hr // 3))
 
-        # 공격 시 주먹
+        # 공격 임팩트(주먹/발) 강조 원
         if st["fist"]:
             f = st["fist"]
             pygame.draw.circle(surface, s.ATTACK_COLOR, (f["x"], f["y"]), f["r"])

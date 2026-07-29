@@ -160,62 +160,67 @@ function roundRect(x, y, w, h, r) {
 }
 
 function drawFighter(f, color, accent) {
-  // 몸통 박스 (웅크리면 높이가 줄고 발은 바닥에 유지) — 서버가 계산한 bx/by/bw/bh 사용
-  const bx = f.bx, by = f.by, bw = f.bw, bh = f.bh;
-  // 반격 자세: 몸통 뒤에 금색 오라 (깜빡임)
+  const bx = f.bx, by = f.by, bw = f.bw, bh = f.bh, sk = f.skel;
+  // 상태 오라 (몸 뒤)
   if (f.counter > 0 && Math.floor(f.counter / 3) % 2 === 0) {
     ctx.fillStyle = COLORS.counter;
-    roundRect(bx - 8, by - 8, bw + 16, bh + 16, 12);
-    ctx.fill();
+    roundRect(bx - 8, by - 8, bw + 16, bh + 16, 14); ctx.fill();
   }
-  // 몸통 (가드 브레이크 스턴 중엔 마젠타로 깜빡)
+  // 몸 색 (가드브레이크 마젠타 깜빡 > 피격 흰색 > 기본)
   const gb = f.guard_break || 0;
-  if (gb > 0 && Math.floor(gb / 4) % 2 === 0) ctx.fillStyle = COLORS.guardBreak;
-  else ctx.fillStyle = f.flash ? COLORS.white : color;
-  roundRect(bx, by, bw, bh, 8);
-  ctx.fill();
-  ctx.strokeStyle = accent;
-  ctx.lineWidth = 3;
-  roundRect(bx, by, bw, bh, 8);
-  ctx.stroke();
-  // 피격 중 밝은 외곽 글로우
-  if (f.hurt > 0) {
-    ctx.strokeStyle = COLORS.spark;
-    ctx.lineWidth = 3;
-    roundRect(bx - 3, by - 3, bw + 6, bh + 6, 10);
+  let bodyCol;
+  if (gb > 0 && Math.floor(gb / 4) % 2 === 0) bodyCol = COLORS.guardBreak;
+  else bodyCol = f.flash ? COLORS.white : color;
+
+  const lw = sk.lw, jr = sk.joint;
+  function limb(pts) {
+    ctx.strokeStyle = bodyCol; ctx.fillStyle = bodyCol;
+    ctx.lineWidth = lw; ctx.lineCap = "round"; ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
     ctx.stroke();
+    // 손/발 강조
+    const end = pts[pts.length - 1];
+    ctx.fillStyle = accent;
+    ctx.beginPath(); ctx.arc(end[0], end[1], jr, 0, Math.PI * 2); ctx.fill();
   }
-  // 가드 브레이크 마젠타 외곽선
-  if (gb > 0) {
-    ctx.strokeStyle = COLORS.guardBreak;
-    ctx.lineWidth = 3;
-    roundRect(bx - 5, by - 5, bw + 10, bh + 10, 12);
-    ctx.stroke();
-  }
-  // 반격 자세 금색 외곽선
-  if (f.counter > 0) {
-    ctx.strokeStyle = COLORS.counter;
-    ctx.lineWidth = 3;
-    roundRect(bx - 4, by - 4, bw + 8, bh + 8, 11);
-    ctx.stroke();
-  }
+  const poly = (pts, fill, stroke, sw) => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = sw; ctx.stroke(); }
+  };
+
+  // 뒤쪽 팔·다리 → 몸통 → 머리 → 앞쪽 다리·팔
+  limb(sk.arm_b);
+  limb(sk.leg_b);
+  poly(sk.torso, bodyCol, accent, 2);
+  const [hx, hy, hr] = sk.head;
+  ctx.fillStyle = bodyCol; ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI * 2); ctx.stroke();
+  limb(sk.leg_f);
+  limb(sk.arm_f);
+
+  // 상태 외곽선
+  if (f.hurt > 0) { ctx.strokeStyle = COLORS.spark; ctx.lineWidth = 2; roundRect(bx - 3, by - 3, bw + 6, bh + 6, 10); ctx.stroke(); }
+  if (gb > 0) { ctx.strokeStyle = COLORS.guardBreak; ctx.lineWidth = 3; roundRect(bx - 5, by - 5, bw + 10, bh + 10, 12); ctx.stroke(); }
+  if (f.counter > 0) { ctx.strokeStyle = COLORS.counter; ctx.lineWidth = 3; roundRect(bx - 4, by - 4, bw + 8, bh + 8, 11); ctx.stroke(); }
+
   // 눈
   ctx.fillStyle = COLORS.black;
-  ctx.beginPath();
-  ctx.arc(f.eye[0], f.eye[1], 5, 0, Math.PI * 2);
-  ctx.fill();
-  // 주먹
+  ctx.beginPath(); ctx.arc(f.eye[0], f.eye[1], Math.max(3, Math.floor(hr / 3)), 0, Math.PI * 2); ctx.fill();
+  // 공격 임팩트(주먹/발) 강조 원
   if (f.fist) {
     ctx.fillStyle = COLORS.attack;
-    ctx.beginPath();
-    ctx.arc(f.fist.x, f.fist.y, f.fist.r, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(f.fist.x, f.fist.y, f.fist.r, 0, Math.PI * 2); ctx.fill();
   }
   // 가드
   if (f.guard) {
     ctx.fillStyle = COLORS.block;
-    roundRect(f.guard.x, f.guard.y, f.guard.w, f.guard.h, 4);
-    ctx.fill();
+    roundRect(f.guard.x, f.guard.y, f.guard.w, f.guard.h, 4); ctx.fill();
   }
 }
 
