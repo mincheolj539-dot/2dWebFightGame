@@ -112,8 +112,18 @@ class Game:
         for e in effects:
             t = e["life"] / e["max"]        # 1.0 → 0.0 (raw effect 딕셔너리)
             grow = 1.0 - t                  # 진행도 (터질수록 확산)
-            if e.get("kind") == "guardbreak":
+            kind = e.get("kind")
+            if kind == "guardbreak":
                 self._draw_guard_break(surface, e["x"], e["y"], t, grow)
+                continue
+            if kind == "dust":
+                cx, cy = e["x"], e["y"]
+                for k in (-1, 0, 1):
+                    px = cx + int(k * grow * 22)
+                    py = cy - int(grow * 8)
+                    pr = max(1, int((5 - abs(k)) * t))
+                    if pr > 0:
+                        pygame.draw.circle(surface, s.DUST_COLOR, (px, py), pr)
                 continue
             blocked = e.get("block")
             spark_col = s.BLOCK_COLOR if blocked else s.SPARK_COLOR

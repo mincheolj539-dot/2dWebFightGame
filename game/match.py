@@ -36,6 +36,7 @@ class Match:
         self.popup = None                 # (텍스트, 남은 프레임) - 특수기 명중 표시
         self.effects = []                 # 임팩트 스파크: [{x,y,life,max,big}]
         self.shake = 0                    # 화면 흔들림 남은 프레임
+        self.hitstop = 0                  # 히트 시 정지 프레임 (타격감)
         self.start_round()
 
     def start_round(self):
@@ -58,6 +59,11 @@ class Match:
     # ---- 진행 (Step) ----
     def step(self, p1_actions, p2_actions):
         """한 프레임 진행. actions는 ACTIONS 키를 갖는 눌림 상태 딕셔너리."""
+        # 히트스톱: 임팩트 순간 몇 프레임 완전 정지 (타격감)
+        if self.hitstop > 0:
+            self.hitstop -= 1
+            return
+
         self.frame += 1
 
         # 팝업 수명 감소
@@ -90,6 +96,13 @@ class Match:
         # 물리 갱신
         self.p1.update()
         self.p2.update()
+
+        # 착지·대시 먼지 (플래그는 읽고 나서 리셋)
+        for p in (self.p1, self.p2):
+            if p.just_landed or p.just_dashed:
+                self._spawn_dust(p.center_x, s.GROUND_Y)
+            p.just_landed = False
+            p.just_dashed = False
 
         # 서로 바라보기
         self.p1.face(self.p2)
@@ -139,6 +152,7 @@ class Match:
                 impact_y = attacker.y + s.FIGHTER_H * 0.4
                 self._spawn_spark(impact_x, impact_y, True, False)
                 self.shake = max(self.shake, s.SHAKE_SPECIAL)
+                self.hitstop = max(self.hitstop, s.HITSTOP_BIG)
                 self.popup = (f"{defender.name} COUNTER!", s.FPS)
                 return
 
@@ -165,8 +179,10 @@ class Match:
                     defender.guard_locked = True
                     defender.blocking = False
                 self.shake = max(self.shake, s.SHAKE_NORMAL // 2)
+                self.hitstop = max(self.hitstop, 2)
             else:
                 self.shake = max(self.shake, s.SHAKE_SPECIAL if big else s.SHAKE_NORMAL)
+                self.hitstop = max(self.hitstop, s.HITSTOP_BIG if big else s.HITSTOP)
             if move is not s.NORMAL_MOVE and move["level"] != "low":
                 self.popup = (f"{attacker.name} {move['name']}!", s.FPS)
 
@@ -188,6 +204,7 @@ class Match:
             "big": True, "block": False, "kind": "guardbreak",
         })
         self.shake = max(self.shake, s.SHAKE_SPECIAL)
+        self.hitstop = max(self.hitstop, s.HITSTOP_BIG)
         self.popup = (f"{attacker.name} GUARD BREAK!", int(s.FPS * 1.2))
 
     @staticmethod
@@ -216,6 +233,13 @@ class Match:
             "big": big,
             "block": blocked,
             "kind": "spark",
+        })
+
+    def _spawn_dust(self, x, y):
+        self.effects.append({
+            "x": int(x), "y": int(y),
+            "life": s.DUST_LIFE, "max": s.DUST_LIFE,
+            "big": False, "block": False, "kind": "dust",
         })
 
     def _finish_round(self):

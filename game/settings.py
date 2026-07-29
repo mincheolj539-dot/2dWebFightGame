@@ -135,6 +135,14 @@ SHAKE_MAG = 9                  # 최대 흔들림 픽셀
 SPARK_LIFE = 12               # 임팩트 스파크 지속 프레임
 SPARK_LIFE_BIG = 18
 
+# 타격감 (Juice)
+HITSTOP = 3                    # 히트 시 정지 프레임 (임팩트 강조)
+HITSTOP_BIG = 6               # 특수기/가드브레이크 정지 프레임
+DUST_LIFE = 14                # 착지·대시 먼지 지속 프레임
+JUMP_STRETCH = 0.14            # 점프 시 세로로 늘어나는 정도
+LAND_SQUASH = 0.18            # 착지 시 납작해지는 정도
+DUST_COLOR = (150, 150, 165)   # 먼지 색
+
 # 색상 (Colors) - R, G, B
 WHITE = (240, 240, 240)
 BLACK = (18, 18, 22)

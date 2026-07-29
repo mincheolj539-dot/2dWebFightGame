@@ -50,6 +50,9 @@ class Fighter:
         self.move = s.NORMAL_MOVE         # 현재/마지막 시전한 기술
         self.input_buffer = []            # [(frame, token)] - 커맨드 판정용 최근 방향 입력
         self.anim_t = 0                   # 애니메이션 프레임 카운터 (걷기/대기 사이클)
+        self.squash = 0.0                 # 스쿼시/스트레치 (+세로 늘림, -납작). 0으로 감쇠
+        self.just_landed = False          # 이번 프레임에 착지했는지 (먼지용)
+        self.just_dashed = False          # 이번 프레임에 대시를 시작했는지 (먼지용)
 
     # ---- 파생 속성 (Derived properties) ----
     @property
@@ -131,10 +134,11 @@ class Fighter:
         if not moving and self.on_ground and not self.is_attacking:
             self.vx = 0.0
 
-        # 점프 (웅크리는 중엔 불가)
+        # 점프 (웅크리는 중엔 불가) — 뛸 때 세로로 살짝 늘어남
         if actions["jump"] and self.on_ground and not self.blocking and not self.crouching:
             self.vy = s.JUMP_VELOCITY
             self.on_ground = False
+            self.squash = s.JUMP_STRETCH
 
         # 공격은 이산 입력(on_keydown)에서 처리한다.
         # 커맨드(연속 방향 입력) 판정에는 눌림 상태가 아니라 이산 입력이 필요하기 때문.
@@ -175,6 +179,7 @@ class Fighter:
             self.dash_timer = s.DASH_DURATION
             direction = self.facing if token == "forward" else -self.facing
             self.dash_vx = direction * s.DASH_SPEED
+            self.just_dashed = True        # 대시 먼지
             self.input_buffer.clear()     # 3연타로 재발동되지 않게
 
     def _try_attack(self, frame):
@@ -238,6 +243,10 @@ class Fighter:
     # ---- 상태 갱신 (Update) ----
     def update(self):
         self.anim_t += 1
+        self.just_landed = False
+        was_air = not self.on_ground
+        self.squash *= 0.72               # 스쿼시/스트레치 감쇠
+
         # 중력
         self.vy += s.GRAVITY
         self.x += self.vx
@@ -247,8 +256,11 @@ class Fighter:
         floor = s.GROUND_Y - s.FIGHTER_H
         if self.y >= floor:
             self.y = float(floor)
-            self.vy = 0.0
             self.on_ground = True
+            if was_air and self.vy > 6:   # 낙하 착지 → 먼지 + 납작
+                self.just_landed = True
+                self.squash = -s.LAND_SQUASH
+            self.vy = 0.0
 
         # 화면 경계 (Clamp to screen)
         self.x = max(0.0, min(self.x, s.WIDTH - s.FIGHTER_W))
@@ -348,12 +360,16 @@ class Fighter:
         외형 계산 로직을 JS에 중복 구현하지 않기 위함.
         """
         # 몸통 그리기 박스 (웅크리면 높이가 줄고 발은 바닥에 유지)
-        bh = s.CROUCH_H if self.crouching else s.FIGHTER_H
-        by = int(self.y + (s.FIGHTER_H - bh))
+        # 스쿼시/스트레치를 세로·가로에 반영 (점프 늘림 / 착지 납작)
+        bh0 = s.CROUCH_H if self.crouching else s.FIGHTER_H
+        bh = max(20, round(bh0 * (1 + self.squash)))
+        bw = max(20, round(s.FIGHTER_W * (1 - self.squash * 0.5)))
+        by = int(self.y + s.FIGHTER_H - bh)          # 발을 바닥에 유지
+        bx = int(self.x + (s.FIGHTER_W - bw) / 2)    # 가로 중앙 정렬
         st = {
             "x": int(self.x),
             "y": int(self.y),
-            "bx": int(self.x), "by": by, "bw": s.FIGHTER_W, "bh": bh,
+            "bx": bx, "by": by, "bw": bw, "bh": bh,
             "crouch": self.crouching,
             "facing": self.facing,
             "flash": self.hitstun > 0 and (self.hitstun // 2) % 2 == 0,

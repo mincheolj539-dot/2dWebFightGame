@@ -18,6 +18,7 @@ const COLORS = {
   spark: "rgb(255,240,190)",
   counter: "rgb(255,220,70)",
   guardGauge: "rgb(120,220,255)", guardLow: "rgb(255,120,90)", guardBreak: "rgb(255,80,170)",
+  dust: "rgb(150,150,165)",
 };
 const SHAKE_MAG = 9, SHAKE_SPECIAL = 14;  // settings.py와 동기화
 
@@ -303,6 +304,16 @@ function drawEffects(effects) {
   for (const e of effects) {
     const grow = 1 - e.t;
     if (e.kind === "guardbreak") { drawGuardBreak(e, grow); continue; }
+    if (e.kind === "dust") {
+      ctx.fillStyle = COLORS.dust;
+      for (const k of [-1, 0, 1]) {
+        const pr = Math.max(1, (5 - Math.abs(k)) * e.t);
+        ctx.beginPath();
+        ctx.arc(e.x + k * grow * 22, e.y - grow * 8, pr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      continue;
+    }
     const sparkCol = e.block ? COLORS.block : COLORS.spark;  // 가드 시 파란색
     const base = e.big ? 16 : 11;
     const ringR = base * (0.5 + grow * 1.4);
