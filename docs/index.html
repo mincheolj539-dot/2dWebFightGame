@@ -4,18 +4,64 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title> 민철권 </title>
+
+<!-- ========================================================================
+     [광고] Google AdSense 로더.
+     AdSense 승인 후 아래 주석을 풀고 ca-pub-XXXXXXXXXXXXXXXX 를 본인 게시자 ID로 교체.
+     (승인 전엔 각 광고 슬롯의 회색 플레이스홀더가 보인다.)
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX"
+        crossorigin="anonymous"></script>
+======================================================================== -->
+
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     background: #12141f;
     color: #f0f0f0;
     font-family: Consolas, "Malgun Gothic", monospace;
+    min-height: 100vh;
+  }
+  /* 3단 무대: [왼쪽 광고] [게임] [오른쪽 광고] */
+  .stage {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 20px;
+    min-height: 100vh;
+    padding: 16px;
+  }
+  .game-col {
     display: flex;
     flex-direction: column;
     align-items: center;
-    min-height: 100vh;
     justify-content: center;
     gap: 12px;
+    min-height: calc(100vh - 32px);
+  }
+  /* 사이드 광고 레일 (스크롤해도 따라오게 sticky) */
+  .ad-rail {
+    flex: 0 0 auto;
+    align-self: center;
+    position: sticky;
+    top: 16px;
+  }
+  .ad-slot {
+    width: 160px;
+    height: 600px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #556;
+    font-size: 12px;
+    letter-spacing: 1px;
+    background: #16182a;
+    border: 1px dashed #2c2f45;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  /* 화면이 좁으면(1280px 미만) 사이드 광고 숨김 — 모바일/좁은 데스크톱 */
+  @media (max-width: 1280px) {
+    .ad-rail { display: none; }
   }
   h1 { font-size: 22px; letter-spacing: 2px; }
   #wrap { position: relative; width: min(960px, 96vw); }
@@ -76,29 +122,63 @@
 </style>
 </head>
 <body>
-<h1> 민철권 </h1>
-<div id="wrap">
-  <canvas id="game" width="960" height="540"></canvas>
-  <div id="overlay">
-    <div id="status">서버에 연결하는 중...</div>
-    <div id="lobby" style="display:none">
-      <div style="display:flex; flex-direction:column; gap:14px; align-items:center">
-        <button id="btn-create">방 만들기</button>
-        <div class="row">
-          <input id="room-input" maxlength="4" placeholder="코드">
-          <button id="btn-join">참가</button>
+<div class="stage">
+
+  <!-- ===== 왼쪽 광고 ===== -->
+  <aside class="ad-rail">
+    <div class="ad-slot">
+      광고 영역 160×600
+      <!-- AdSense 승인 후 위 텍스트를 지우고 아래 <ins> 로 교체 (data-ad-slot 은 광고 단위 ID):
+      <ins class="adsbygoogle" style="display:inline-block;width:160px;height:600px"
+           data-ad-client="ca-pub-XXXXXXXXXXXXXXXX" data-ad-slot="1111111111"></ins>
+      <script>(adsbygoogle=window.adsbygoogle||[]).push({});</script>
+      -->
+    </div>
+  </aside>
+
+  <!-- ===== 게임 ===== -->
+  <div class="game-col">
+    <h1> 민철권 </h1>
+    <div id="wrap">
+      <canvas id="game" width="960" height="540"></canvas>
+      <div id="overlay">
+        <div id="status">서버에 연결하는 중...</div>
+        <div id="lobby" style="display:none">
+          <div style="display:flex; flex-direction:column; gap:14px; align-items:center">
+            <button id="btn-create">방 만들기</button>
+            <div class="row">
+              <input id="room-input" maxlength="4" placeholder="코드">
+              <button id="btn-join">참가</button>
+            </div>
+          </div>
         </div>
+        <div id="share" style="display:none"></div>
+        <button id="btn-copy" style="display:none">링크 복사</button>
       </div>
     </div>
-    <div id="share" style="display:none"></div>
-    <button id="btn-copy" style="display:none">링크 복사</button>
+    <div id="help">
+      이동 A/D·←→ · 점프 W/↑ · 웅크리기 아래(S/↓) · 공격 F/. · 방어 G// · 앞앞 = 대시 · 뒤뒤 = 백대시<br>
+      아래+공격 = 로우킥(앉아 막아야 방어) · 공중+공격 = 점프킥(서서 막아야 방어) · 아래+방어 = 앉아 막기 · ↓앞+공격 = 어퍼컷<br>
+      가드 게이지: 계속 막으면 게이지가 닳아 가드가 풀림 · 가드 중 어퍼컷 맞으면 <b>가드브레이크(1초 스턴)</b><br>
+      공격+방어 동시(F+G) = 반격기(0.5초 내 맞으면 1.5배 반사 · 헛치면 경직+쿨타임) · R = 재시작
+    </div>
+    <div style="font-size:12px;color:#667;margin-top:4px">
+      <a href="privacy.html" style="color:#778">개인정보처리방침</a>
+    </div>
   </div>
-</div>
-<div id="help">
-  이동 A/D·←→ · 점프 W/↑ · 웅크리기 아래(S/↓) · 공격 F/. · 방어 G// · 앞앞 = 대시 · 뒤뒤 = 백대시<br>
-  아래+공격 = 로우킥(앉아 막아야 방어) · 공중+공격 = 점프킥(서서 막아야 방어) · 아래+방어 = 앉아 막기 · ↓앞+공격 = 어퍼컷<br>
-  가드 게이지: 계속 막으면 게이지가 닳아 가드가 풀림 · 가드 중 어퍼컷 맞으면 <b>가드브레이크(1초 스턴)</b><br>
-  공격+방어 동시(F+G) = 반격기(0.5초 내 맞으면 1.5배 반사 · 헛치면 경직+쿨타임) · R = 재시작
+
+  <!-- ===== 오른쪽 광고 ===== -->
+  <aside class="ad-rail">
+    <div class="ad-slot">
+      광고 영역 160×600
+      <!-- AdSense 승인 후 위 텍스트를 지우고 아래 <ins> 로 교체:
+      <ins class="adsbygoogle" style="display:inline-block;width:160px;height:600px"
+           data-ad-client="ca-pub-XXXXXXXXXXXXXXXX" data-ad-slot="2222222222"></ins>
+      <script>(adsbygoogle=window.adsbygoogle||[]).push({});</script>
+      -->
+    </div>
+  </aside>
+
 </div>
 <!-- ?v= 는 캐시 무효화용 버전. game.js/config.js 를 수정하면 숫자를 올린다. -->
 <script src="config.js?v=6"></script>
