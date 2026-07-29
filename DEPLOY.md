@@ -69,3 +69,6 @@ python server/server.py                    # 터미널 1: 대전 서버 (포트 
 python -m http.server 8080 -d docs        # 터미널 2: 웹 클라이언트
 # 브라우저 탭 2개로 http://localhost:8080 접속 → 한쪽이 방 만들고 한쪽이 참가
 ```
+`docs/config.js` 는 **localhost 로 열면 자동으로 `ws://localhost:8765`** 를,
+배포 사이트에서 열면 프로덕션(`wss://...`) 주소를 쓴다. 따라서 로컬 테스트에
+`?server=` 를 붙일 필요가 없고, 배포 서버가 죽어 있어도 로컬 대전은 된다.

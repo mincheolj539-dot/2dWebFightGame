@@ -1,5 +1,12 @@
 // 대전 서버 주소 설정.
-// Render 등에 서버를 배포한 뒤 아래 값을 wss://<앱이름>.onrender.com 으로 바꾼다.
-// (로컬 테스트는 ws://localhost:8765 그대로)
-// URL 에 ?server=... 를 붙이면 이 값을 덮어쓸 수 있다.
-window.GAME_SERVER = "wss://fight-server.onrender.com";
+//
+// 로컬(localhost/127.0.0.1)에서 열면 자동으로 로컬 대전 서버(ws://localhost:8765)를 쓰고,
+// 배포된 사이트에서 열면 아래 PROD 주소를 쓴다.
+// URL 에 ?server=... 를 붙이면 무엇이든 덮어쓸 수 있다.
+(function () {
+  var PROD = "wss://fight-server.onrender.com";   // 배포 서버 (Render)
+  var LOCAL = "ws://localhost:8765";               // 로컬 서버 (python server/server.py)
+  var host = location.hostname;
+  var isLocal = (host === "localhost" || host === "127.0.0.1" || host === "");
+  window.GAME_SERVER = isLocal ? LOCAL : PROD;
+})();
