@@ -52,6 +52,7 @@ from game.game import Game
 - **`game/game.py` + `main.py`** — 데스크톱 클라이언트(렌더링 + 키 변환 + async 루프). `await asyncio.sleep(0)` 는 Pygbag 호환 잔재이자 관례로 유지.
 
 - **`docs/`** — GitHub Pages 용 정적 클라이언트. `game.js` 상단 상수(캔버스 크기·색상·`HIT_STUN`/`SHAKE_*`)만 `settings.py` 와 수동 동기화 — 값을 바꾸면 양쪽 다 수정할 것. `index.html` 의 `?v=N` 캐시버스터는 `game.js`/`config.js` 를 수정할 때마다 숫자를 올려 플레이어의 브라우저가 옛 JS를 캐시하지 않게 한다.
+  - **로컬 2인(한 화면)** 은 JS 시뮬레이션이 아니라 **한 페이지에서 소켓 2개**를 열어 같은 방의 P1/P2 로 접속하는 방식이다(`localMode`, `connectLocalP2`). 로직은 여전히 서버 Match 하나뿐이고 JS는 키를 어느 소켓으로 보낼지만 나눈다(`routeKey`, `KEYMAP_LOCAL`). 서버 수정 없이 배포 서버에서도 동작.
   - 히트 이펙트(임팩트 스파크·화면 흔들림·피격 광선)는 `Match` 가 `state()`(effects/shake) 와 fighter의 `hurt` 로 데이터를 내려주고, `game.py`/`game.js` 두 렌더러가 동일하게 그린다. 흔들림은 월드(배경+파이터+스파크)에만 적용하고 HUD/오버레이는 고정.
 
 - **`game/settings.py`** — **모든 밸런스·색상·물리 상수의 단일 출처**. 기술 정의(`NORMAL_MOVE`, `CROUCH_MOVE`, `AIR_MOVE`, `SPECIAL_MOVES` — 각 dict에 damage/range/duration/active/cooldown/lunge/launch/stun/**level**)를 포함. 새 특수기 추가 = `SPECIAL_MOVES` 에 dict 하나 추가로 끝나야 정상 (서버·데스크톱 자동 반영, JS 수정 불필요).

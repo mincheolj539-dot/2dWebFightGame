@@ -22,7 +22,8 @@ const COLORS = {
 };
 const SHAKE_MAG = 9, SHAKE_SPECIAL = 14;  // settings.py와 동기화
 
-// ---- 키 → 액션 매핑 (혼자 플레이하므로 WASD와 방향키 둘 다 자신에게 매핑) ----
+// ---- 키 → 액션 매핑 ----
+// 온라인: 내 파이터 하나만 조작하므로 WASD와 방향키 둘 다 자신에게 매핑.
 const KEYMAP = {
   KeyA: "left", ArrowLeft: "left",
   KeyD: "right", ArrowRight: "right",
@@ -30,6 +31,12 @@ const KEYMAP = {
   KeyS: "down", ArrowDown: "down",
   KeyF: "attack", Period: "attack",
   KeyG: "block", Slash: "block",
+};
+// 로컬 2인(한 화면): 1P = WASD + F/G, 2P = 방향키 + 넘패드 1/2
+const KEYMAP_LOCAL = {
+  P1: { KeyA: "left", KeyD: "right", KeyW: "jump", KeyS: "down", KeyF: "attack", KeyG: "block" },
+  P2: { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "jump", ArrowDown: "down",
+        Numpad1: "attack", Numpad2: "block" },
 };
 
 // ---- DOM ----
@@ -42,7 +49,11 @@ const shareEl = document.getElementById("share");
 const copyBtn = document.getElementById("btn-copy");
 
 // ---- 연결 상태 ----
-let ws = null;
+// 로컬 2인 모드는 한 페이지에서 소켓을 2개 열어 같은 방의 P1/P2 로 접속한다.
+// (게임 로직은 서버 Match 하나에만 있고, 여기선 키를 어느 소켓으로 보낼지만 나눈다.)
+let ws = null;        // 주 소켓 — P1 조작 + 화면에 그릴 상태 수신
+let ws2 = null;       // 로컬 2인 모드에서 P2 조작용 보조 소켓
+let localMode = false;
 let mySide = null;
 let lastState = null;
 let started = false;
@@ -76,7 +87,11 @@ function connect(onOpen) {
     const msg = JSON.parse(ev.data);
     if (msg.t === "room") {
       mySide = msg.side;
-      if (mySide === "P1") {
+      if (localMode) {
+        // 방이 만들어졌으니 같은 방에 2P 소켓을 붙인다 → 서버가 두 명으로 보고 시작.
+        setStatus("로컬 대전 준비 중...");
+        connectLocalP2(msg.code);
+      } else if (mySide === "P1") {
         lobbyEl.style.display = "none";
         shareEl.style.display = "block";
         copyBtn.style.display = "inline-block";
@@ -95,11 +110,22 @@ function connect(onOpen) {
       lobbyEl.style.display = "none";
       shareEl.style.display = "none";
       copyBtn.style.display = "none";
-      setStatus("상대가 나갔습니다. 새로고침해서 다시 시작하세요.");
+      setStatus(localMode ? "연결이 끊어졌습니다. 새로고침해서 다시 시작하세요."
+                          : "상대가 나갔습니다. 새로고침해서 다시 시작하세요.");
     } else if (msg.t === "error") {
       setStatus(msg.msg);
       lobbyEl.style.display = "block";
     }
+  };
+}
+
+// 로컬 2인 모드 전용: 같은 방에 2P 로 참가하는 보조 소켓.
+// 상태 스냅샷은 주 소켓 것만 그리므로 여기선 수신 메시지를 쓰지 않는다.
+function connectLocalP2(code) {
+  ws2 = new WebSocket(SERVER);
+  ws2.onopen = () => ws2.send(JSON.stringify({ t: "join", room: code }));
+  ws2.onclose = () => {
+    if (!started) setStatus("2P 연결에 실패했습니다. 새로고침해서 다시 시도하세요.");
   };
 }
 
@@ -108,6 +134,9 @@ let pendingSend = null;
 function send(obj) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
   else pendingSend = obj;              // 방 생성/참가 클릭이 연결 전에 눌린 경우
+}
+function sendTo(sock, obj) {           // 키 입력은 큐에 담지 않는다 (지난 입력은 무의미)
+  if (sock && sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify(obj));
 }
 function flushPending() {
   if (pendingSend && ws && ws.readyState === WebSocket.OPEN) {
@@ -125,6 +154,13 @@ document.getElementById("btn-create").onclick = () => {
                          : "방을 만드는 중...");
   send({ t: "create" });              // 연결 전이면 큐에 담겨 열릴 때 자동 전송
 };
+document.getElementById("btn-local").onclick = () => {
+  localMode = true;
+  lobbyEl.style.display = "none";
+  setStatus(connecting() ? "서버 깨우는 중... (무료 서버라 최대 1분 걸릴 수 있어요)"
+                         : "로컬 대전 준비 중...");
+  send({ t: "create" });              // 방이 만들어지면 2P 소켓이 자동으로 참가
+};
 document.getElementById("btn-join").onclick = () => {
   const code = document.getElementById("room-input").value.trim().toUpperCase();
   if (code.length !== 4) return;
@@ -139,16 +175,24 @@ copyBtn.onclick = () => {
 };
 
 // ---- 키 입력 ----
+// 로컬 2인 모드에선 키가 속한 플레이어의 소켓으로 보낸다.
+function routeKey(e, down) {
+  if (localMode) {
+    const a1 = KEYMAP_LOCAL.P1[e.code];
+    if (a1) { e.preventDefault(); sendTo(ws, { t: "key", a: a1, d: down }); return; }
+    const a2 = KEYMAP_LOCAL.P2[e.code];
+    if (a2) { e.preventDefault(); sendTo(ws2, { t: "key", a: a2, d: down }); }
+    return;
+  }
+  const action = KEYMAP[e.code];
+  if (action) { e.preventDefault(); sendTo(ws, { t: "key", a: action, d: down }); }
+}
 window.addEventListener("keydown", (e) => {
   if (e.repeat) return;                       // 커맨드 판정에 자동 반복 입력 금지
   if (e.code === "KeyR") { send({ t: "restart" }); return; }
-  const action = KEYMAP[e.code];
-  if (action) { e.preventDefault(); send({ t: "key", a: action, d: true }); }
+  routeKey(e, true);
 });
-window.addEventListener("keyup", (e) => {
-  const action = KEYMAP[e.code];
-  if (action) { e.preventDefault(); send({ t: "key", a: action, d: false }); }
-});
+window.addEventListener("keyup", (e) => routeKey(e, false));
 
 // ---- 렌더링 (데스크톱 game.py draw 와 동일한 모양) ----
 const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
@@ -362,9 +406,12 @@ function draw() {
   ctx.fillStyle = COLORS.white;
   ctx.font = "bold 18px Consolas, monospace";
   ctx.textAlign = "left";
-  ctx.fillText("P1 " + "●".repeat(st.wins.P1) + (mySide === "P1" ? "  (YOU)" : ""), 30, 74);
+  // 로컬 2인 모드는 누가 어느 키인지, 온라인은 어느 쪽이 나인지 표시
+  const tag1 = localMode ? "  (WASD)" : (mySide === "P1" ? "  (YOU)" : "");
+  const tag2 = localMode ? "(방향키)  " : (mySide === "P2" ? "(YOU)  " : "");
+  ctx.fillText("P1 " + "●".repeat(st.wins.P1) + tag1, 30, 74);
   ctx.textAlign = "right";
-  ctx.fillText((mySide === "P2" ? "(YOU)  " : "") + "●".repeat(st.wins.P2) + " P2", W - 30, 74);
+  ctx.fillText(tag2 + "●".repeat(st.wins.P2) + " P2", W - 30, 74);
   ctx.textAlign = "center";
   ctx.font = "bold 30px Consolas, monospace";
   ctx.fillText(String(st.time), W / 2, 64);
