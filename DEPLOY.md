@@ -1,11 +1,11 @@
 # 배포 가이드 — URL로 바로 온라인 대전
 
 목표: 친구에게 링크만 보내면 브라우저에서 바로 대전.
-구성: **클라이언트 = GitHub Pages** (정적) + **서버 = Render** (WebSocket, 무료).
+구성: **클라이언트 = GitHub Pages** (정적) + **서버 = 집 NAS 의 Docker 컨테이너** (WebSocket).
 
 ## 0. 준비물
 - GitHub 계정 (https://github.com)
-- Render 계정 (https://render.com — GitHub 계정으로 가입 가능)
+- Docker 를 돌릴 수 있는 NAS (여기선 Portainer + DSM 역방향 프록시)
 
 ## 1. GitHub에 올리기
 로컬 커밋은 이미 되어 있다. GitHub에서 새 저장소를 만들고 push:
@@ -16,15 +16,7 @@ git remote add origin https://github.com/<내아이디>/2dWebFightGame.git
 git push -u origin main
 ```
 
-## 2. 서버 배포 (Render)
-1. https://dashboard.render.com → **New → Blueprint**
-2. 방금 만든 GitHub 저장소 연결 → `render.yaml`이 자동 인식됨 → **Apply**
-3. 배포가 끝나면 서버 주소가 생긴다: `https://fight-server-XXXX.onrender.com`
-   → WebSocket 주소는 **`wss://fight-server-XXXX.onrender.com`** (https → wss)
-
-## 2-B. 서버를 NAS(Docker/Portainer)에서 돌리기 — 현재 구성
-
-Render 대신 집 NAS 에서 서버를 돌린다. 클라이언트는 그대로 GitHub Pages.
+## 2. 서버 배포 (NAS + Docker/Portainer) — 현재 구성
 
 전제(확인된 상태): NAS 의 DSM nginx 가 443 에서 **`creamel.duckdns.org` 용 Let's Encrypt
 인증서**를 서비스 중이고, Portainer 는 9444 에 있다. 그래서 **새 인증서 발급 없이**
@@ -69,23 +61,19 @@ curl https://creamel.duckdns.org/fight
 그다음 브라우저에서 `?server=wss://creamel.duckdns.org/fight` 를 붙여 열고
 **방 만들기** 가 되면 웹소켓 업그레이드까지 성공.
 
-### 4) 클라이언트 주소 전환
-[docs/config.js](docs/config.js) 의 `PROD` 는 이미
-`wss://creamel.duckdns.org/fight` 로 되어 있다. **위 1~3 이 끝난 뒤에 push/merge** 할 것
-(프록시가 없는 상태로 배포하면 라이브 사이트의 온라인 대전이 끊긴다).
-되돌리려면 같은 파일의 주석에 있는 Render 주소로 교체.
-
 ### 주의
-- NAS 가 꺼지거나 인터넷이 끊기면 온라인 대전도 멈춘다(Render 와 달리 콜드 스타트는 없음).
+- NAS 가 꺼지거나 인터넷이 끊기면 온라인 대전도 멈춘다(대신 Render 같은 콜드 스타트는 없다).
 - duckdns 인증서 갱신은 DSM 이 자동으로 한다. 만료되면 wss 가 바로 끊기니 갱신 실패 알림을 켜둘 것.
 - 집 IP 가 바뀌어도 duckdns 가 따라가지만, `nas.creamel.kr` A 레코드는 수동 관리라면 같이 갱신해야 한다.
 
 ## 3. 클라이언트에 서버 주소 연결
-[docs/config.js](docs/config.js) 의 주소를 바꾸고 push:
+[docs/config.js](docs/config.js) 의 `PROD` 가 서버 주소다. 현재 값:
 
 ```js
-window.GAME_SERVER = "wss://fight-server-XXXX.onrender.com";
+var PROD = "wss://creamel.duckdns.org/fight";
 ```
+
+주소를 바꿨으면 커밋 후 push(= GitHub Pages 재배포):
 
 ```bash
 git add docs/config.js && git commit -m "Set production server URL" && git push
@@ -101,14 +89,14 @@ git add docs/config.js && git commit -m "Set production server URL" && git push
 2. 친구가 링크 접속 → 자동 참가 → 대전 시작!
 
 ## 주의사항
-- **Render 무료 플랜은 15분 동안 접속이 없으면 잠들었다가 첫 접속 시 깨어나는 데
-  30초~1분 걸린다.** 방이 안 만들어지면 잠시 기다렸다 새로고침.
+- **서버(NAS 컨테이너)가 떠 있어야 온라인 대전이 된다.** 방이 안 만들어지면
+  Portainer 에서 `fight-server` 컨테이너 상태부터 확인.
 - GitHub Pages는 https 이므로 서버 주소는 반드시 `wss://` (ws:// 는 브라우저가 차단).
 - 서버 주소를 임시로 바꿔 테스트하려면 URL 뒤에 `?server=wss://...` 를 붙이면 된다.
 
 ## 보안 설정 (선택, 프로덕션 권장)
-서버는 기본적으로 방/연결/메시지 폭주(DoS)를 막는 제한이 켜져 있다. Render 대시보드의
-**Environment** 에서 아래 환경변수로 조정할 수 있다(모두 선택):
+서버는 기본적으로 방/연결/메시지 폭주(DoS)를 막는 제한이 켜져 있다.
+[docker-compose.yml](docker-compose.yml) 의 `environment:` 에서 아래 값을 조정한다(모두 선택):
 
 | 변수 | 기본값 | 설명 |
 |------|:------:|------|

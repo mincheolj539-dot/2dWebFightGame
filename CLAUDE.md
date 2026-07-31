@@ -15,7 +15,7 @@ python server/server.py                # 온라인 대전 서버 (포트 8765, P
 python -m http.server 8080 -d docs     # 웹 클라이언트 서빙 → 탭 2개로 온라인 대전 테스트
 ```
 
-배포는 [DEPLOY.md](DEPLOY.md): 클라이언트 = GitHub Pages(main 브랜치 /docs), 서버 = Render(render.yaml). `docs/config.js` 의 `GAME_SERVER` 가 서버 주소.
+배포는 [DEPLOY.md](DEPLOY.md): 클라이언트 = GitHub Pages(main 브랜치 /docs), 서버 = NAS 의 Docker 컨테이너(Dockerfile/docker-compose.yml, DSM 역방향 프록시로 wss 노출). `docs/config.js` 의 `GAME_SERVER` 가 서버 주소. `render.yaml` 은 예전 Render 배포용 잔재.
 
 테스트 프레임워크는 없다. 로직 검증은 SDL dummy 드라이버로 창 없이 돌리는 헤드리스 스모크 테스트로 한다:
 
