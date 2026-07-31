@@ -47,6 +47,9 @@ const statusEl = document.getElementById("status");
 const lobbyEl = document.getElementById("lobby");
 const shareEl = document.getElementById("share");
 const copyBtn = document.getElementById("btn-copy");
+const nickEl = document.getElementById("nick");
+const myRatingEl = document.getElementById("my-rating");
+const cancelBtn = document.getElementById("btn-cancel");
 
 // ---- 연결 상태 ----
 // 로컬 2인 모드는 한 페이지에서 소켓을 2개 열어 같은 방의 P1/P2 로 접속한다.
@@ -58,6 +61,22 @@ let mySide = null;
 let lastState = null;
 let started = false;
 
+// ---- 레이팅 대전 ----
+// 계정이 없으므로 플레이어 식별은 브라우저에 저장한 임의 ID로 한다.
+// (저장소를 지우면 새 플레이어가 되고 점수도 초기화된다.)
+let ranked = null;            // {me:{name,rating}, opp:{name,rating}} — 매칭되면 채워짐
+let ratingResult = null;      // {old,new,delta} — 매치 종료 후 서버가 알려줌
+
+function playerId() {
+  let id = localStorage.getItem("fightPlayerId");
+  if (!id) {
+    id = (crypto.randomUUID && crypto.randomUUID()) ||
+         String(Date.now()) + Math.random().toString(36).slice(2);
+    localStorage.setItem("fightPlayerId", id);
+  }
+  return id;
+}
+
 const params = new URLSearchParams(location.search);
 const SERVER = params.get("server") || window.GAME_SERVER;
 
@@ -65,7 +84,10 @@ function setStatus(text) { statusEl.textContent = text; }
 
 function showLobby() {
   lobbyEl.style.display = "block";
-  setStatus("방을 만들거나 코드로 참가하세요");
+  nickEl.value = localStorage.getItem("fightName") || "";
+  const r = localStorage.getItem("fightRating");
+  myRatingEl.textContent = r ? "내 레이팅 " + r : "";
+  setStatus("레이팅 대전을 하거나, 방을 만들어 친구와 하세요");
 }
 
 function shareUrl(code) {
@@ -100,6 +122,20 @@ function connect(onOpen) {
       } else {
         setStatus("참가 완료! 곧 시작합니다...");
       }
+    } else if (msg.t === "queued") {
+      lobbyEl.style.display = "none";
+      cancelBtn.style.display = "inline-block";
+      setStatus("상대를 찾는 중... (내 레이팅 " + msg.rating + " · 대기 " + msg.waiting + "명)");
+    } else if (msg.t === "matched") {
+      mySide = msg.side;
+      ranked = { me: msg.me, opp: msg.opp };
+      ratingResult = null;
+      cancelBtn.style.display = "none";
+      setStatus("매칭 완료! " + msg.opp.name + " (" + msg.opp.rating + ")");
+    } else if (msg.t === "rating") {
+      ratingResult = msg;
+      if (ranked) ranked.me.rating = msg.new;
+      localStorage.setItem("fightRating", msg.new);
     } else if (msg.t === "start") {
       started = true;
       overlay.classList.add("hidden");
@@ -110,6 +146,7 @@ function connect(onOpen) {
       lobbyEl.style.display = "none";
       shareEl.style.display = "none";
       copyBtn.style.display = "none";
+      cancelBtn.style.display = "none";
       setStatus(localMode ? "연결이 끊어졌습니다. 새로고침해서 다시 시작하세요."
                           : "상대가 나갔습니다. 새로고침해서 다시 시작하세요.");
     } else if (msg.t === "error") {
@@ -148,6 +185,18 @@ function flushPending() {
 // ---- 로비 UI ----
 // 아직 연결 전이면 클릭을 큐에 담고 연결 중임을 알린다.
 const connecting = () => !(ws && ws.readyState === WebSocket.OPEN);
+document.getElementById("btn-rank").onclick = () => {
+  const name = nickEl.value.trim() || "익명";
+  localStorage.setItem("fightName", name);
+  lobbyEl.style.display = "none";
+  setStatus(connecting() ? "서버에 연결하는 중..." : "상대를 찾는 중...");
+  send({ t: "queue", id: playerId(), name: name });
+};
+cancelBtn.onclick = () => {
+  send({ t: "cancel" });
+  cancelBtn.style.display = "none";
+  showLobby();
+};
 document.getElementById("btn-create").onclick = () => {
   lobbyEl.style.display = "none";
   setStatus(connecting() ? "서버에 연결하는 중..."
@@ -299,6 +348,13 @@ function drawGuardGauge(f, x, alignLeft) {
   }
 }
 
+// 레이팅 대전이면 "P1/P2" 대신 닉네임+점수를 쓴다.
+function sideLabel(side) {
+  if (!ranked || (side !== "P1" && side !== "P2")) return side;
+  const p = (mySide === side) ? ranked.me : ranked.opp;
+  return p.name + " " + p.rating;
+}
+
 function drawCenterText(title, subtitle) {
   ctx.fillStyle = "rgba(0,0,0,0.47)";
   ctx.fillRect(0, 0, W, H);
@@ -409,9 +465,9 @@ function draw() {
   // 로컬 2인 모드는 누가 어느 키인지, 온라인은 어느 쪽이 나인지 표시
   const tag1 = localMode ? "  (WASD)" : (mySide === "P1" ? "  (YOU)" : "");
   const tag2 = localMode ? "(방향키)  " : (mySide === "P2" ? "(YOU)  " : "");
-  ctx.fillText("P1 " + "●".repeat(st.wins.P1) + tag1, 30, 74);
+  ctx.fillText(sideLabel("P1") + " " + "●".repeat(st.wins.P1) + tag1, 30, 74);
   ctx.textAlign = "right";
-  ctx.fillText(tag2 + "●".repeat(st.wins.P2) + " P2", W - 30, 74);
+  ctx.fillText(tag2 + "●".repeat(st.wins.P2) + " " + sideLabel("P2"), W - 30, 74);
   ctx.textAlign = "center";
   ctx.font = "bold 30px Consolas, monospace";
   ctx.fillText(String(st.time), W / 2, 64);
@@ -423,11 +479,17 @@ function draw() {
     ctx.fillText(st.popup, W / 2, 130);
   }
 
-  // 라운드/매치 종료 표시
+  // 라운드/매치 종료 표시 (레이팅 대전이면 점수 변동도 함께)
   if (st.match_over) {
-    drawCenterText(st.match_winner + " WINS THE MATCH!", "R 키로 재시작");
+    let sub = "R 키로 재시작";
+    if (ratingResult) {
+      const d = ratingResult.delta;
+      sub = "레이팅 " + ratingResult.new + " (" + (d >= 0 ? "+" : "") + d + ")  ·  " + sub;
+    }
+    drawCenterText(sideLabel(st.match_winner) + " WINS THE MATCH!", sub);
   } else if (st.round_over) {
-    drawCenterText(st.round_winner === "DRAW" ? "DRAW" : st.round_winner + " WINS ROUND", null);
+    drawCenterText(st.round_winner === "DRAW" ? "DRAW"
+                                              : sideLabel(st.round_winner) + " WINS ROUND", null);
   }
 }
 

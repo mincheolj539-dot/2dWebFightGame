@@ -9,7 +9,13 @@ services:
     restart: unless-stopped
     ports:
       - "8765:8765"        # 호스트포트:컨테이너포트 (리버스 프록시가 이 포트로 프록시)
+    volumes:
+      - fight-data:/app/data   # 레이팅 기록 보존 (컨테이너를 지워도 남게)
     environment:
       PORT: "8765"
+      DATA_DIR: "/app/data"
       # 내 사이트만 접속 허용 (여러 개는 쉼표로 구분). 미설정 시 모든 origin 허용.
       ALLOWED_ORIGINS: "https://mincheolj539-dot.github.io"
+
+volumes:
+  fight-data:

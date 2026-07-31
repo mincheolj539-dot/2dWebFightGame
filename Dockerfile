@@ -12,5 +12,6 @@ COPY game/ game/
 COPY server/ server/
 
 ENV PORT=8765
+ENV DATA_DIR=/app/data
 EXPOSE 8765
 CMD ["python", "server/server.py"]

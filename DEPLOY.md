@@ -47,6 +47,9 @@ DSM → **Container Manager → 프로젝트 → 생성**
 curl http://localhost:8765          # → "fight server OK"
 ```
 
+레이팅 기록은 컨테이너 안 `/app/data/ratings.json` 에 쌓이고, compose 의 `fight-data`
+볼륨에 보존된다(컨테이너를 지우고 다시 만들어도 점수가 남는다). 초기화하려면 그 볼륨을 삭제.
+
 코드를 고친 뒤 서버를 갱신하려면: main 에 push → Actions 완료 후
 Container Manager 프로젝트에서 **재빌드/다시 시작**(이미지 pull) 하면 된다.
 

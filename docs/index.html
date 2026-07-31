@@ -116,6 +116,9 @@
     word-break: break-all;
     max-width: 90%;
   }
+  #nick { text-transform: none; width: 170px; }
+  #my-rating { font-size: 14px; color: #8ad; }
+  .sep { font-size: 12px; color: #667; letter-spacing: 2px; }
   #status { font-size: 16px; color: #aac; }
   #help { font-size: 13px; color: #778; line-height: 1.7; }
   .row { display: flex; gap: 8px; align-items: center; }
@@ -145,6 +148,12 @@
         <div id="status">서버에 연결하는 중...</div>
         <div id="lobby" style="display:none">
           <div style="display:flex; flex-direction:column; gap:14px; align-items:center">
+            <div class="row">
+              <input id="nick" maxlength="12" placeholder="닉네임">
+              <button id="btn-rank">레이팅 대전</button>
+            </div>
+            <div id="my-rating"></div>
+            <div class="sep">또는</div>
             <button id="btn-create">방 만들기</button>
             <div class="row">
               <input id="room-input" maxlength="4" placeholder="코드">
@@ -153,6 +162,7 @@
             <button id="btn-local">한 컴퓨터에서 2인 대전</button>
           </div>
         </div>
+        <button id="btn-cancel" style="display:none">대기 취소</button>
         <div id="share" style="display:none"></div>
         <button id="btn-copy" style="display:none">링크 복사</button>
       </div>
@@ -162,7 +172,8 @@
       <b>한 컴퓨터 2인 대전</b>: 1P = WASD + 공격 F · 방어 G　/　2P = 방향키 + 공격 넘패드1 · 방어 넘패드2<br>
       아래+공격 = 로우킥(앉아 막아야 방어) · 공중+공격 = 점프킥(서서 막아야 방어) · 아래+방어 = 앉아 막기 · ↓앞+공격 = 어퍼컷<br>
       가드 게이지: 계속 막으면 게이지가 닳아 가드가 풀림 · 가드 중 어퍼컷 맞으면 <b>가드브레이크(1초 스턴)</b><br>
-      공격+방어 동시(F+G) = 반격기(0.5초 내 맞으면 1.5배 반사 · 헛치면 경직+쿨타임) · R = 재시작
+      공격+방어 동시(F+G) = 반격기(0.5초 내 맞으면 1.5배 반사 · 헛치면 경직+쿨타임) · R = 재시작<br>
+      <b>레이팅 대전</b>: 닉네임 입력 후 버튼 → 비슷한 점수의 상대와 자동 매칭 · 승패로 점수 변동(시작 1000)
     </div>
     <div style="font-size:12px;color:#667;margin-top:4px">
       <a href="privacy.html" style="color:#778">개인정보처리방침</a>
@@ -183,7 +194,7 @@
 
 </div>
 <!-- ?v= 는 캐시 무효화용 버전. game.js/config.js 를 수정하면 숫자를 올린다. -->
-<script src="config.js?v=14"></script>
-<script src="game.js?v=14"></script>
+<script src="config.js?v=15"></script>
+<script src="game.js?v=15"></script>
 </body>
 </html>
