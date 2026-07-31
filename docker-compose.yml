@@ -1,0 +1,14 @@
+# NAS(Portainer/Container Manager)용 스택 정의.
+# Portainer → Stacks → Add stack → Repository(이 저장소) 또는 Web editor 에 붙여넣기.
+services:
+  fight-server:
+    build: .
+    image: fight-server:latest
+    container_name: fight-server
+    restart: unless-stopped
+    ports:
+      - "8765:8765"        # 호스트포트:컨테이너포트 (리버스 프록시가 이 포트로 프록시)
+    environment:
+      PORT: "8765"
+      # 내 사이트만 접속 허용 (여러 개는 쉼표로 구분). 미설정 시 모든 origin 허용.
+      # ALLOWED_ORIGINS: "https://<내아이디>.github.io"

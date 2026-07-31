@@ -22,6 +22,64 @@ git push -u origin main
 3. 배포가 끝나면 서버 주소가 생긴다: `https://fight-server-XXXX.onrender.com`
    → WebSocket 주소는 **`wss://fight-server-XXXX.onrender.com`** (https → wss)
 
+## 2-B. 서버를 NAS(Docker/Portainer)에서 돌리기 — 현재 구성
+
+Render 대신 집 NAS 에서 서버를 돌린다. 클라이언트는 그대로 GitHub Pages.
+
+전제(확인된 상태): NAS 의 DSM nginx 가 443 에서 **`creamel.duckdns.org` 용 Let's Encrypt
+인증서**를 서비스 중이고, Portainer 는 9444 에 있다. 그래서 **새 인증서 발급 없이**
+443 에 경로 하나(`/fight`)만 얹으면 `wss://creamel.duckdns.org/fight` 로 붙는다.
+(`nas.creamel.kr` 은 같은 IP 지만 이 인증서에 포함되어 있지 않으므로 wss 주소로 쓰지 말 것.)
+
+### 1) 컨테이너 띄우기 (Portainer)
+Portainer(`https://nas.creamel.kr:9444`) → **Stacks → Add stack**
+
+- **Repository** 방식: 이 저장소 URL + Compose path `docker-compose.yml`
+- 또는 **Web editor** 에 [docker-compose.yml](docker-compose.yml) 내용을 붙여넣기
+  (이 경우 `build: .` 대신 저장소를 NAS 에 clone 해두거나 Repository 방식을 쓸 것)
+
+환경변수 `ALLOWED_ORIGINS` 에 내 페이지 주소를 넣으면 다른 사이트의 무단 사용을 막는다:
+`https://<내아이디>.github.io`
+
+배포 후 컨테이너가 `8765` 포트로 뜨는지 확인. NAS 안에서:
+```bash
+curl http://localhost:8765          # → "fight server OK"
+```
+
+### 2) 역방향 프록시로 wss 열기 (DSM)
+DSM → **제어판 → 로그인 포털 → 고급 → 역방향 프록시 → 생성**
+
+| 항목 | 값 |
+|------|-----|
+| 소스 프로토콜 / 호스트 이름 / 포트 | HTTPS / `creamel.duckdns.org` / `443` |
+| 소스 경로 | `/fight` |
+| 대상 프로토콜 / 호스트 이름 / 포트 | HTTP / `localhost` / `8765` |
+
+**사용자 지정 헤더** 탭에서 `WebSocket` 프리셋을 추가한다(= `Upgrade`, `Connection` 헤더).
+이걸 빠뜨리면 핸드셰이크가 400/502 로 실패한다. 서버는 경로를 보지 않으므로
+`/fight` 를 그대로 넘겨도 된다.
+
+443 은 이미 외부에 열려 있으므로 라우터 포트포워딩은 추가할 것이 없다.
+
+### 3) 확인
+```bash
+curl https://creamel.duckdns.org/fight
+```
+`fight server OK` 가 나오면 프록시가 서버까지 닿은 것(서버는 웹소켓이 아닌 요청에 이렇게 답한다).
+그다음 브라우저에서 `?server=wss://creamel.duckdns.org/fight` 를 붙여 열고
+**방 만들기** 가 되면 웹소켓 업그레이드까지 성공.
+
+### 4) 클라이언트 주소 전환
+[docs/config.js](docs/config.js) 의 `PROD` 는 이미
+`wss://creamel.duckdns.org/fight` 로 되어 있다. **위 1~3 이 끝난 뒤에 push/merge** 할 것
+(프록시가 없는 상태로 배포하면 라이브 사이트의 온라인 대전이 끊긴다).
+되돌리려면 같은 파일의 주석에 있는 Render 주소로 교체.
+
+### 주의
+- NAS 가 꺼지거나 인터넷이 끊기면 온라인 대전도 멈춘다(Render 와 달리 콜드 스타트는 없음).
+- duckdns 인증서 갱신은 DSM 이 자동으로 한다. 만료되면 wss 가 바로 끊기니 갱신 실패 알림을 켜둘 것.
+- 집 IP 가 바뀌어도 duckdns 가 따라가지만, `nas.creamel.kr` A 레코드는 수동 관리라면 같이 갱신해야 한다.
+
 ## 3. 클라이언트에 서버 주소 연결
 [docs/config.js](docs/config.js) 의 주소를 바꾸고 push:
 
