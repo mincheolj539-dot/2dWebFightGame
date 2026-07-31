@@ -28,8 +28,9 @@ main 에 push 되면 [.github/workflows/docker-image.yml](.github/workflows/dock
 이미지를 빌드해 **`ghcr.io/mincheolj539-dot/fight-server:latest`** 로 올린다.
 NAS 는 빌드 없이 pull 만 하면 된다.
 
-첫 배포 전에 **패키지를 public 으로** 바꿔둘 것(아니면 NAS 가 로그인 없이 pull 못 함):
-GitHub → 프로필 → **Packages → fight-server → Package settings → Change visibility → Public**
+현재 이 패키지는 **익명 pull 가능**(공개) 상태다 — NAS 에서 별도 로그인이 필요 없다.
+혹시 private 으로 바뀌면 GitHub → 프로필 → **Packages → fight-server →
+Package settings → Change visibility → Public** 으로 되돌리면 된다.
 
 ### 2) 컨테이너 띄우기 (DSM Container Manager)
 DSM → **Container Manager → 프로젝트 → 생성**
