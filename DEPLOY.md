@@ -16,29 +16,40 @@ git remote add origin https://github.com/<내아이디>/2dWebFightGame.git
 git push -u origin main
 ```
 
-## 2. 서버 배포 (NAS + Docker/Portainer) — 현재 구성
+## 2. 서버 배포 (NAS Docker) — 현재 구성
 
 전제(확인된 상태): NAS 의 DSM nginx 가 443 에서 **`creamel.duckdns.org` 용 Let's Encrypt
-인증서**를 서비스 중이고, Portainer 는 9444 에 있다. 그래서 **새 인증서 발급 없이**
+인증서**를 서비스 중이다. 그래서 **새 인증서 발급 없이**
 443 에 경로 하나(`/fight`)만 얹으면 `wss://creamel.duckdns.org/fight` 로 붙는다.
 (`nas.creamel.kr` 은 같은 IP 지만 이 인증서에 포함되어 있지 않으므로 wss 주소로 쓰지 말 것.)
 
-### 1) 컨테이너 띄우기 (Portainer)
-Portainer(`https://nas.creamel.kr:9444`) → **Stacks → Add stack**
+### 1) 이미지 빌드는 GitHub 이 한다
+main 에 push 되면 [.github/workflows/docker-image.yml](.github/workflows/docker-image.yml) 이
+이미지를 빌드해 **`ghcr.io/mincheolj539-dot/fight-server:latest`** 로 올린다.
+NAS 는 빌드 없이 pull 만 하면 된다.
 
-- **Repository** 방식: 이 저장소 URL + Compose path `docker-compose.yml`
-- 또는 **Web editor** 에 [docker-compose.yml](docker-compose.yml) 내용을 붙여넣기
-  (이 경우 `build: .` 대신 저장소를 NAS 에 clone 해두거나 Repository 방식을 쓸 것)
+첫 배포 전에 **패키지를 public 으로** 바꿔둘 것(아니면 NAS 가 로그인 없이 pull 못 함):
+GitHub → 프로필 → **Packages → fight-server → Package settings → Change visibility → Public**
 
-환경변수 `ALLOWED_ORIGINS` 에 내 페이지 주소를 넣으면 다른 사이트의 무단 사용을 막는다:
-`https://<내아이디>.github.io`
+### 2) 컨테이너 띄우기 (DSM Container Manager)
+DSM → **Container Manager → 프로젝트 → 생성**
 
-배포 후 컨테이너가 `8765` 포트로 뜨는지 확인. NAS 안에서:
+- 경로: 아무 폴더나 새로 지정(예: `/docker/fight-server`)
+- 소스: **YAML 붙여넣기** → [docker-compose.yml](docker-compose.yml) 내용 그대로
+- 다음 → 완료 (이미지 pull 후 자동 실행)
+
+> Portainer 를 쓸 수도 있지만, 환경이 Edge Agent 로 등록돼 있고 연결이 끊긴 상태라면
+> 에이전트를 NAS 에 다시 띄워야 하므로 Container Manager 쪽이 빠르다.
+
+확인 — NAS 안에서(또는 Container Manager 로그에서):
 ```bash
 curl http://localhost:8765          # → "fight server OK"
 ```
 
-### 2) 역방향 프록시로 wss 열기 (DSM)
+코드를 고친 뒤 서버를 갱신하려면: main 에 push → Actions 완료 후
+Container Manager 프로젝트에서 **재빌드/다시 시작**(이미지 pull) 하면 된다.
+
+### 3) 역방향 프록시로 wss 열기 (DSM)
 DSM → **제어판 → 로그인 포털 → 고급 → 역방향 프록시 → 생성**
 
 | 항목 | 값 |
@@ -53,7 +64,7 @@ DSM → **제어판 → 로그인 포털 → 고급 → 역방향 프록시 → 
 
 443 은 이미 외부에 열려 있으므로 라우터 포트포워딩은 추가할 것이 없다.
 
-### 3) 확인
+### 4) 확인
 ```bash
 curl https://creamel.duckdns.org/fight
 ```

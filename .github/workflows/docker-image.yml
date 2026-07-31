@@ -1,0 +1,31 @@
+# main 에 push 되면 서버 이미지를 빌드해 GHCR(ghcr.io)에 올린다.
+# NAS 는 소스를 빌드할 필요 없이 이 이미지를 pull 하기만 하면 된다.
+name: build server image
+
+on:
+  push:
+    branches: [main]
+    paths: ["game/**", "server/**", "Dockerfile", ".github/workflows/docker-image.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # 소문자 저장소명 고정 (GHCR 은 대문자를 허용하지 않는다)
+          tags: ghcr.io/${{ github.repository_owner }}/fight-server:latest

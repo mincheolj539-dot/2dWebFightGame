@@ -1,9 +1,10 @@
-# NAS(Portainer/Container Manager)용 스택 정의.
-# Portainer → Stacks → Add stack → Repository(이 저장소) 또는 Web editor 에 붙여넣기.
+# NAS(DSM Container Manager / Portainer)용 스택 정의.
+# 이미지는 GitHub Actions 가 main push 마다 빌드해 GHCR 에 올린다 → NAS 는 pull 만 한다.
+# (소스에서 직접 빌드하려면 image 줄을 지우고 `build: .` 주석을 풀면 된다.)
 services:
   fight-server:
-    build: .
-    image: fight-server:latest
+    image: ghcr.io/mincheolj539-dot/fight-server:latest
+    # build: .
     container_name: fight-server
     restart: unless-stopped
     ports:
@@ -11,4 +12,4 @@ services:
     environment:
       PORT: "8765"
       # 내 사이트만 접속 허용 (여러 개는 쉼표로 구분). 미설정 시 모든 origin 허용.
-      # ALLOWED_ORIGINS: "https://<내아이디>.github.io"
+      ALLOWED_ORIGINS: "https://mincheolj539-dot.github.io"
