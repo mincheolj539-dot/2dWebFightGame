@@ -5,7 +5,6 @@
 // URL 에 ?server=... 를 붙이면 무엇이든 덮어쓸 수 있다.
 (function () {
   // 배포 서버 = NAS(Docker) + DSM 역방향 프록시. 인증서가 붙은 443 을 통해 wss 로 접속.
-  // (이전 Render 주소: wss://fight-server.onrender.com — 되돌리려면 이 줄로 교체)
   var PROD = "wss://minicheolgwon.p-e.kr";
   var LOCAL = "ws://localhost:8765";               // 로컬 서버 (python server/server.py)
   var host = location.hostname;

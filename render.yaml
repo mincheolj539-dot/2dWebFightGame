@@ -1,8 +1,0 @@
-# Render.com 배포 설정 — 저장소를 Render에 연결하면 자동 인식된다.
-services:
-  - type: web
-    name: fight-server
-    runtime: python
-    plan: free
-    buildCommand: pip install -r server/requirements.txt
-    startCommand: python server/server.py

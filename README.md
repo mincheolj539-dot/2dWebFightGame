@@ -65,7 +65,6 @@ server/
   server.py        # 온라인 대전 WebSocket 서버 (Match를 60Hz 실행)
 docs/              # 브라우저 클라이언트 (GitHub Pages 호스팅용)
   index.html / game.js / config.js
-render.yaml        # Render 서버 배포 설정
 DEPLOY.md          # 배포 가이드
 ```
 

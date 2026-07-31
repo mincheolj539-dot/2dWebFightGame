@@ -129,7 +129,7 @@ function connectLocalP2(code) {
   };
 }
 
-// 소켓이 아직 열리지 않았으면(Render 콜드 스타트 등) 보류했다가 open 시 전송.
+// 소켓이 아직 열리지 않았으면 보류했다가 open 시 전송.
 let pendingSend = null;
 function send(obj) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
@@ -146,25 +146,25 @@ function flushPending() {
 }
 
 // ---- 로비 UI ----
-// 아직 연결 전이면 "서버 깨우는 중" 안내 (Render 무료 서버 콜드 스타트는 최대 1분).
+// 아직 연결 전이면 클릭을 큐에 담고 연결 중임을 알린다.
 const connecting = () => !(ws && ws.readyState === WebSocket.OPEN);
 document.getElementById("btn-create").onclick = () => {
   lobbyEl.style.display = "none";
-  setStatus(connecting() ? "서버 깨우는 중... (무료 서버라 최대 1분 걸릴 수 있어요)"
+  setStatus(connecting() ? "서버에 연결하는 중..."
                          : "방을 만드는 중...");
   send({ t: "create" });              // 연결 전이면 큐에 담겨 열릴 때 자동 전송
 };
 document.getElementById("btn-local").onclick = () => {
   localMode = true;
   lobbyEl.style.display = "none";
-  setStatus(connecting() ? "서버 깨우는 중... (무료 서버라 최대 1분 걸릴 수 있어요)"
+  setStatus(connecting() ? "서버에 연결하는 중..."
                          : "로컬 대전 준비 중...");
   send({ t: "create" });              // 방이 만들어지면 2P 소켓이 자동으로 참가
 };
 document.getElementById("btn-join").onclick = () => {
   const code = document.getElementById("room-input").value.trim().toUpperCase();
   if (code.length !== 4) return;
-  setStatus(connecting() ? "서버 깨우는 중... (무료 서버라 최대 1분 걸릴 수 있어요)"
+  setStatus(connecting() ? "서버에 연결하는 중..."
                          : "방 " + code + " 에 참가하는 중...");
   send({ t: "join", room: code });
 };
