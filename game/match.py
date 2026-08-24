@@ -8,14 +8,18 @@ from . import settings as s
 from .fighter import Fighter
 
 # 눌림 상태로 전달되는 액션 목록 (이산 입력인 attack/방향 커맨드는 key_event로)
-ACTIONS = ("left", "right", "jump", "down", "attack", "block")
+ACTIONS = ("left", "right", "jump", "down", "attack", "light", "heavy", "special", "block")
 NO_INPUT = {a: False for a in ACTIONS}
 
 
 class Match:
     """한 매치(3판 2선승)의 전체 상태와 진행."""
 
-    def __init__(self):
+    def __init__(self, p1_character=s.DEFAULT_CHARACTER,
+                 p2_character=s.DEFAULT_CHARACTER, stage="NIGHT"):
+        self.p1_character = p1_character if p1_character in s.CHARACTER_PROFILES else s.DEFAULT_CHARACTER
+        self.p2_character = p2_character if p2_character in s.CHARACTER_PROFILES else s.DEFAULT_CHARACTER
+        self.stage = stage if stage in s.STAGES else s.STAGES[0]
         self.frame = 0                    # 전역 프레임 카운터 (커맨드 타이밍 판정용)
         self.new_match()
 
@@ -25,10 +29,12 @@ class Match:
         self.p1 = Fighter(
             x=s.WIDTH * 0.25 - s.FIGHTER_W / 2,
             color=s.P1_COLOR, accent=s.P1_ACCENT, facing=1, name="P1",
+            character=self.p1_character,
         )
         self.p2 = Fighter(
             x=s.WIDTH * 0.75 - s.FIGHTER_W / 2,
             color=s.P2_COLOR, accent=s.P2_ACCENT, facing=-1, name="P2",
+            character=self.p2_character,
         )
         self.wins = {"P1": 0, "P2": 0}
         self.match_over = False
@@ -37,6 +43,9 @@ class Match:
         self.effects = []                 # 임팩트 스파크: [{x,y,life,max,big}]
         self.shake = 0                    # 화면 흔들림 남은 프레임
         self.hitstop = 0                  # 히트 시 정지 프레임 (타격감)
+        self.combo_side = None
+        self.combo_count = 0
+        self.combo_timer = 0
         self.start_round()
 
     def start_round(self):
@@ -78,6 +87,11 @@ class Match:
             for e in self.effects:
                 e["life"] -= 1
             self.effects = [e for e in self.effects if e["life"] > 0]
+        if self.combo_timer > 0:
+            self.combo_timer -= 1
+        else:
+            self.combo_side = None
+            self.combo_count = 0
 
         if self.match_over:
             return
@@ -146,8 +160,9 @@ class Match:
             if defender.counter_active:
                 defender.counter_timer = 0                 # 반격 소비
                 back = 1 if attacker.center_x >= defender.center_x else -1
-                dmg = move["damage"] * s.COUNTER_MULT
+                dmg = move["damage"] * attacker.profile["damage"] * s.COUNTER_MULT
                 attacker.take_hit(dmg, back, 0, s.COUNTER_STUN, blocked=False)
+                defender.meter = min(s.METER_MAX, defender.meter + s.METER_ON_HIT)
                 impact_x = attacker.x if back == -1 else attacker.x + s.FIGHTER_W
                 impact_y = attacker.y + s.FIGHTER_H * 0.4
                 self._spawn_spark(impact_x, impact_y, True, False)
@@ -164,8 +179,19 @@ class Match:
                 self._guard_break(attacker, defender, move, direction)
                 return
 
-            defender.take_hit(move["damage"], direction, move["launch"],
+            defender.take_hit(move["damage"] * attacker.profile["damage"], direction, move["launch"],
                               move.get("stun"), blocked)
+            attacker.meter = min(
+                s.METER_MAX,
+                attacker.meter + (s.METER_ON_BLOCK if blocked else s.METER_ON_HIT),
+            )
+            if not blocked:
+                if self.combo_side == attacker.name and self.combo_timer > 0:
+                    self.combo_count += 1
+                else:
+                    self.combo_side = attacker.name
+                    self.combo_count = 1
+                self.combo_timer = 45
             big = move is not s.NORMAL_MOVE and move["level"] != "low"
             # 임팩트 지점: 피격자의 맞은 쪽 옆면. 막았으면 가드 높이, 아니면 레벨별.
             impact_x = defender.x if direction == 1 else defender.x + s.FIGHTER_W
@@ -271,6 +297,7 @@ class Match:
             "fighters": [
                 {
                     "name": f.name,
+                    "character": f.character,
                     "health": f.health,
                     **f.render_state(),
                 }
@@ -289,4 +316,6 @@ class Match:
                 for e in self.effects
             ],
             "shake": self.shake,
+            "stage": self.stage,
+            "combo": {"side": self.combo_side, "count": self.combo_count},
         }

@@ -80,9 +80,12 @@ class Conn:
 
 
 class Room:
-    def __init__(self, code):
+    def __init__(self, code, p1_character=s.DEFAULT_CHARACTER, stage="NIGHT"):
         self.code = code
-        self.match = Match()
+        self.p1_character = p1_character if p1_character in s.CHARACTER_PROFILES else s.DEFAULT_CHARACTER
+        self.p2_character = s.DEFAULT_CHARACTER
+        self.stage = stage if stage in s.STAGES else s.STAGES[0]
+        self.match = Match(self.p1_character, self.p2_character, self.stage)
         self.players = {}                 # "P1"/"P2" -> websocket
         self.conns = {}                   # "P1"/"P2" -> Conn (레이팅 대전일 때만 채움)
         self.ranked = False
@@ -93,6 +96,9 @@ class Room:
         }
         self.task = None                  # 시뮬레이션 루프 태스크
         self.closed = False
+        self.ready = {"P1": False, "P2": False}
+        self.rematch = {"P1": False, "P2": False}
+        self.started = False
 
     @property
     def full(self):
@@ -104,15 +110,33 @@ class Room:
             self.task = asyncio.create_task(self._loop())
 
     async def _loop(self):
-        """60Hz 시뮬레이션 + 상태 브로드캐스트."""
-        self._broadcast({"t": "start"})
+        """로비 대기, 카운트다운, 60Hz 시뮬레이션 + 상태 브로드캐스트."""
         loop = asyncio.get_event_loop()
         next_tick = loop.time()
         while not self.closed:
+            if not self.started:
+                if self.full and all(self.ready.values()):
+                    for count in (3, 2, 1):
+                        if self.closed or not self.full or not all(self.ready.values()):
+                            break
+                        self._broadcast({"t": "countdown", "n": count})
+                        await asyncio.sleep(1)
+                    if self.closed or not self.full or not all(self.ready.values()):
+                        continue
+                    self.started = True
+                    self._broadcast({"t": "start"})
+                    next_tick = loop.time()
+                else:
+                    await asyncio.sleep(0.05)
+                    continue
             self.match.step(self.inputs["P1"], self.inputs["P2"])
             self._broadcast({"t": "state", "s": self.match.state()})
             if self.ranked and self.match.match_over and not self.rated:
                 self._apply_rating()
+            if self.match.match_over:
+                self.started = False
+                self.ready = {"P1": False, "P2": False}
+                self._broadcast({"t": "match_finished"})
             next_tick += FRAME_DT
             delay = next_tick - loop.time()
             if delay > 0:
@@ -139,9 +163,29 @@ class Room:
         self._send("P1", {"t": "rating", "old": old1, "new": new1, "delta": new1 - old1})
         self._send("P2", {"t": "rating", "old": old2, "new": new2, "delta": new2 - old2})
 
+    def _lobby(self):
+        return {"t": "lobby", "players": len(self.players), "ready": dict(self.ready),
+                "rematch": dict(self.rematch), "stage": self.stage}
+
     def handle_message(self, side, msg):
         t = msg.get("t")
-        if t == "key":
+        if t == "ready":
+            if self.full and not self.started:
+                self.ready[side] = bool(msg.get("ready", True))
+                self._broadcast(self._lobby())
+        elif t == "rematch":
+            if self.match.match_over:
+                self.rematch[side] = True
+                self._broadcast({"t": "rematch", "ready": dict(self.rematch)})
+                if all(self.rematch.values()):
+                    self.match = Match(self.p1_character, self.p2_character, self.stage)
+                    self.inputs = {"P1": {a: False for a in ACTIONS},
+                                   "P2": {a: False for a in ACTIONS}}
+                    self.rated = False
+                    self.rematch = {"P1": False, "P2": False}
+                    self.ready = {"P1": True, "P2": True}
+                    self._broadcast(self._lobby())
+        elif t == "key":
             action = msg.get("a")
             down = bool(msg.get("d"))
             if action in ACTIONS:
@@ -153,6 +197,7 @@ class Room:
             if self.match.match_over:
                 self.match.new_match()
                 self.rated = False        # 재대결도 한 판으로 쳐서 레이팅 반영
+                self.ready = {"P1": True, "P2": True}
 
     async def remove(self, side):
         """플레이어 퇴장 처리 — 남은 쪽에 알리고 방 폐쇄."""
@@ -233,6 +278,7 @@ def _start_ranked(a, b):
         conn.side = side
         room.players[side] = conn.ws
         room.conns[side] = conn
+    room.ready = {"P1": True, "P2": True}
     for me, opp in ((a, b), (b, a)):
         broadcast([me.ws], json.dumps({
             "t": "matched", "side": me.side,
@@ -308,7 +354,11 @@ async def handler(ws):
                             {"t": "error", "msg": "서버가 혼잡합니다. 잠시 후 다시 시도하세요"}))
                         continue
                     code = _new_room_code()
-                    conn.room = Room(code)
+                    conn.room = Room(
+                        code,
+                        str(msg.get("character", s.DEFAULT_CHARACTER)).upper(),
+                        str(msg.get("stage", "NIGHT")).upper(),
+                    )
                     rooms[code] = conn.room
                     conn.side = "P1"
                 elif t == "join":
@@ -320,12 +370,20 @@ async def handler(ws):
                         continue
                     conn.room = found
                     conn.side = "P2"
+                    conn.room.p2_character = str(msg.get("character", s.DEFAULT_CHARACTER)).upper()
+                    if conn.room.p2_character not in s.CHARACTER_PROFILES:
+                        conn.room.p2_character = s.DEFAULT_CHARACTER
+                    conn.room.match = Match(conn.room.p1_character, conn.room.p2_character, conn.room.stage)
                 else:
                     continue
                 _leave_queue(conn)          # 대기 중이었다면 빠져나옴
                 conn.room.players[conn.side] = ws
-                await ws.send(json.dumps(
-                    {"t": "room", "code": conn.room.code, "side": conn.side}))
+                await ws.send(json.dumps({
+                    "t": "room", "code": conn.room.code, "side": conn.side,
+                    "character": conn.room.p1_character if conn.side == "P1" else conn.room.p2_character,
+                    "stage": conn.room.stage,
+                }))
+                conn.room._broadcast(conn.room._lobby())
                 conn.room.start_if_ready()
             else:
                 conn.room.handle_message(conn.side, msg)

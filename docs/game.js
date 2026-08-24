@@ -19,6 +19,8 @@ const COLORS = {
   counter: "rgb(255,220,70)",
   guardGauge: "rgb(120,220,255)", guardLow: "rgb(255,120,90)", guardBreak: "rgb(255,80,170)",
   dust: "rgb(150,150,165)",
+  sunsetTop: "rgb(110,48,62)", sunsetBottom: "rgb(35,20,34)",
+  neonTop: "rgb(18,70,86)", neonBottom: "rgb(12,20,38)", meter: "rgb(190,90,255)",
 };
 const SHAKE_MAG = 9, SHAKE_SPECIAL = 14;  // settings.py와 동기화
 
@@ -30,13 +32,14 @@ const KEYMAP = {
   KeyW: "jump", ArrowUp: "jump",
   KeyS: "down", ArrowDown: "down",
   KeyF: "attack", Period: "attack",
+  KeyJ: "light", KeyK: "heavy", KeyL: "special",
   KeyG: "block", Slash: "block",
 };
 // 로컬 2인(한 화면): 1P = WASD + F/G, 2P = 방향키 + 넘패드 1/2
 const KEYMAP_LOCAL = {
-  P1: { KeyA: "left", KeyD: "right", KeyW: "jump", KeyS: "down", KeyF: "attack", KeyG: "block" },
+  P1: { KeyA: "left", KeyD: "right", KeyW: "jump", KeyS: "down", KeyF: "attack", KeyJ: "light", KeyK: "heavy", KeyL: "special", KeyG: "block" },
   P2: { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "jump", ArrowDown: "down",
-        Numpad1: "attack", Numpad2: "block" },
+        Numpad1: "attack", Numpad4: "light", Numpad5: "heavy", Numpad6: "special", Numpad2: "block" },
 };
 
 // ---- DOM ----
@@ -50,6 +53,11 @@ const copyBtn = document.getElementById("btn-copy");
 const nickEl = document.getElementById("nick");
 const myRatingEl = document.getElementById("my-rating");
 const cancelBtn = document.getElementById("btn-cancel");
+const readyBtn = document.getElementById("btn-ready");
+const readyStateEl = document.getElementById("ready-state");
+const rematchBtn = document.getElementById("btn-rematch");
+const characterSelect = document.getElementById("character-select");
+const stageSelect = document.getElementById("stage-select");
 
 // ---- 연결 상태 ----
 // 로컬 2인 모드는 한 페이지에서 소켓을 2개 열어 같은 방의 P1/P2 로 접속한다.
@@ -60,6 +68,9 @@ let localMode = false;
 let mySide = null;
 let lastState = null;
 let started = false;
+let readySent = false;
+let audioContext = null;
+let previousEffects = 0;
 
 // ---- 레이팅 대전 ----
 // 계정이 없으므로 플레이어 식별은 브라우저에 저장한 임의 ID로 한다.
@@ -84,6 +95,11 @@ function setStatus(text) { statusEl.textContent = text; }
 
 function showLobby() {
   lobbyEl.style.display = "block";
+  document.getElementById("selection").style.display = "flex";
+  readyBtn.style.display = "none";
+  rematchBtn.style.display = "none";
+  readyStateEl.textContent = "";
+  readySent = false;
   nickEl.value = localStorage.getItem("fightName") || "";
   const r = localStorage.getItem("fightRating");
   myRatingEl.textContent = r ? "내 레이팅 " + r : "";
@@ -109,6 +125,7 @@ function connect(onOpen) {
     const msg = JSON.parse(ev.data);
     if (msg.t === "room") {
       mySide = msg.side;
+      document.getElementById("selection").style.display = "none";
       if (localMode) {
         // 방이 만들어졌으니 같은 방에 2P 소켓을 붙인다 → 서버가 두 명으로 보고 시작.
         setStatus("로컬 대전 준비 중...");
@@ -122,6 +139,20 @@ function connect(onOpen) {
       } else {
         setStatus("참가 완료! 곧 시작합니다...");
       }
+      if (!localMode) readyBtn.style.display = "inline-block";
+    } else if (msg.t === "lobby") {
+      readyStateEl.textContent = (msg.ready.P1 ? "P1 준비 완료" : "P1 대기 중") + " · " +
+        (msg.ready.P2 ? "P2 준비 완료" : "P2 대기 중");
+      if (localMode) {
+        sendTo(ws, { t: "ready", ready: true });
+        sendTo(ws2, { t: "ready", ready: true });
+      } else {
+        readyBtn.style.display = msg.players === 2 ? "inline-block" : "none";
+        setStatus(msg.players < 2 ? "친구가 참가하길 기다리는 중..." : "양쪽 모두 준비 완료를 눌러주세요");
+      }
+    } else if (msg.t === "countdown") {
+      setStatus("시작까지 " + msg.n + "...");
+      beep(220 + msg.n * 80, 0.08);
     } else if (msg.t === "queued") {
       lobbyEl.style.display = "none";
       cancelBtn.style.display = "inline-block";
@@ -138,9 +169,22 @@ function connect(onOpen) {
       localStorage.setItem("fightRating", msg.new);
     } else if (msg.t === "start") {
       started = true;
+      rematchBtn.style.display = "none";
       overlay.classList.add("hidden");
+      beep(660, 0.18);
     } else if (msg.t === "state") {
       lastState = msg.s;
+      if (msg.s.match_over && !localMode) {
+        overlay.classList.remove("hidden");
+        rematchBtn.style.display = "inline-block";
+        setStatus(msg.s.match_winner + " 승리! 재대결을 원하면 버튼을 누르세요.");
+      }
+      if ((msg.s.effects || []).length > previousEffects) beep(145, 0.045);
+      previousEffects = (msg.s.effects || []).length;
+    } else if (msg.t === "rematch") {
+      rematchBtn.textContent = "준비됨 (상대 대기 중)";
+    } else if (msg.t === "match_finished") {
+      if (!localMode) rematchBtn.style.display = "inline-block";
     } else if (msg.t === "peer_left") {
       overlay.classList.remove("hidden");
       lobbyEl.style.display = "none";
@@ -182,6 +226,19 @@ function flushPending() {
   }
 }
 
+function beep(frequency, duration) {
+  try {
+    audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    osc.type = "square"; osc.frequency.value = frequency;
+    gain.gain.setValueAtTime(0.035, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+    osc.connect(gain).connect(audioContext.destination);
+    osc.start(); osc.stop(audioContext.currentTime + duration);
+  } catch (_) { /* 오디오를 지원하지 않는 환경에서도 게임은 계속된다. */ }
+}
+
 // ---- 로비 UI ----
 // 아직 연결 전이면 클릭을 큐에 담고 연결 중임을 알린다.
 const connecting = () => !(ws && ws.readyState === WebSocket.OPEN);
@@ -201,21 +258,30 @@ document.getElementById("btn-create").onclick = () => {
   lobbyEl.style.display = "none";
   setStatus(connecting() ? "서버에 연결하는 중..."
                          : "방을 만드는 중...");
-  send({ t: "create" });              // 연결 전이면 큐에 담겨 열릴 때 자동 전송
+  send({ t: "create", character: characterSelect.value, stage: stageSelect.value });
 };
 document.getElementById("btn-local").onclick = () => {
   localMode = true;
   lobbyEl.style.display = "none";
   setStatus(connecting() ? "서버에 연결하는 중..."
                          : "로컬 대전 준비 중...");
-  send({ t: "create" });              // 방이 만들어지면 2P 소켓이 자동으로 참가
+  send({ t: "create", character: characterSelect.value, stage: stageSelect.value });
 };
 document.getElementById("btn-join").onclick = () => {
   const code = document.getElementById("room-input").value.trim().toUpperCase();
   if (code.length !== 4) return;
   setStatus(connecting() ? "서버에 연결하는 중..."
                          : "방 " + code + " 에 참가하는 중...");
-  send({ t: "join", room: code });
+  send({ t: "join", room: code, character: characterSelect.value });
+};
+readyBtn.onclick = () => {
+  readySent = !readySent;
+  readyBtn.textContent = readySent ? "준비 취소" : "준비 완료";
+  send({ t: "ready", ready: readySent });
+};
+rematchBtn.onclick = () => {
+  rematchBtn.disabled = true;
+  send({ t: "rematch" });
 };
 copyBtn.onclick = () => {
   navigator.clipboard.writeText(shareEl.textContent);
@@ -238,10 +304,20 @@ function routeKey(e, down) {
 }
 window.addEventListener("keydown", (e) => {
   if (e.repeat) return;                       // 커맨드 판정에 자동 반복 입력 금지
-  if (e.code === "KeyR") { send({ t: "restart" }); return; }
+  if (e.code === "KeyR") { send({ t: lastState && lastState.match_over ? "rematch" : "restart" }); return; }
   routeKey(e, true);
 });
 window.addEventListener("keyup", (e) => routeKey(e, false));
+
+document.querySelectorAll(".touch-btn").forEach((button) => {
+  const action = button.dataset.action;
+  const press = (e) => { e.preventDefault(); beep(120, 0.025); sendTo(ws, { t: "key", a: action, d: true }); };
+  const release = (e) => { e.preventDefault(); sendTo(ws, { t: "key", a: action, d: false }); };
+  button.addEventListener("pointerdown", press);
+  button.addEventListener("pointerup", release);
+  button.addEventListener("pointercancel", release);
+  button.addEventListener("pointerleave", release);
+});
 
 // ---- 렌더링 (데스크톱 game.py draw 와 동일한 모양) ----
 const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
@@ -348,6 +424,14 @@ function drawGuardGauge(f, x, alignLeft) {
   }
 }
 
+function drawMeter(f, x, alignLeft) {
+  const w = 360, h = 7, y = 59;
+  ctx.fillStyle = COLORS.black; roundRect(x - 2, y - 2, w + 4, h + 4, 3); ctx.fill();
+  ctx.fillStyle = COLORS.grey; roundRect(x, y, w, h, 2); ctx.fill();
+  const fillW = Math.floor(w * Math.max(0, Math.min(1, f.meter || 0)));
+  if (fillW > 0) { ctx.fillStyle = COLORS.meter; roundRect(alignLeft ? x : x + w - fillW, y, fillW, h, 2); ctx.fill(); }
+}
+
 // 레이팅 대전이면 "P1/P2" 대신 닉네임+점수를 쓴다.
 function sideLabel(side) {
   if (!ranked || (side !== "P1" && side !== "P2")) return side;
@@ -368,9 +452,13 @@ function drawCenterText(title, subtitle) {
   }
 }
 
-function drawWorld() {
-  // 배경 + 바닥
-  ctx.fillStyle = bgGrad;
+function drawWorld(stage = "NIGHT") {
+  let top = COLORS.bgTop, bottom = COLORS.bgBottom;
+  if (stage === "SUNSET") { top = COLORS.sunsetTop; bottom = COLORS.sunsetBottom; }
+  if (stage === "NEON") { top = COLORS.neonTop; bottom = COLORS.neonBottom; }
+  const gradient = ctx.createLinearGradient(0, 0, 0, H);
+  gradient.addColorStop(0, top); gradient.addColorStop(1, bottom);
+  ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = COLORS.ground;
   ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
@@ -379,6 +467,13 @@ function drawWorld() {
   ctx.beginPath();
   ctx.moveTo(0, GROUND_Y); ctx.lineTo(W, GROUND_Y);
   ctx.stroke();
+  if (stage === "NEON") {
+    ctx.strokeStyle = "rgba(60,220,255,.22)"; ctx.lineWidth = 1;
+    for (let x = 0; x < W; x += 48) { ctx.beginPath(); ctx.moveTo(x, GROUND_Y); ctx.lineTo(W / 2 + (x - W / 2) * .35, H); ctx.stroke(); }
+    for (let y = GROUND_Y + 16; y < H; y += 16) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  } else if (stage === "SUNSET") {
+    ctx.fillStyle = "rgba(255,190,90,.22)"; ctx.beginPath(); ctx.arc(760, 125, 62, 0, Math.PI * 2); ctx.fill();
+  }
 }
 
 function drawGuardBreak(e, grow) {
@@ -446,7 +541,7 @@ function draw() {
   }
   ctx.save();
   ctx.translate(dx, dy);
-  drawWorld();
+  drawWorld(st.stage || "NIGHT");
 
   const [f1, f2] = st.fighters;
   drawFighter(f1, COLORS.p1, COLORS.p1Accent);
@@ -459,6 +554,8 @@ function draw() {
   drawHealthBar(f2.health, W - 30 - 360, false);
   drawGuardGauge(f1, 30, true);
   drawGuardGauge(f2, W - 30 - 360, false);
+  drawMeter(f1, 30, true);
+  drawMeter(f2, W - 30 - 360, false);
   ctx.fillStyle = COLORS.white;
   ctx.font = "bold 18px Consolas, monospace";
   ctx.textAlign = "left";
@@ -477,6 +574,11 @@ function draw() {
     ctx.fillStyle = COLORS.attack;
     ctx.font = "bold 30px Consolas, monospace";
     ctx.fillText(st.popup, W / 2, 130);
+  }
+  if (st.combo && st.combo.count >= 2) {
+    ctx.fillStyle = st.combo.side === "P1" ? COLORS.p1Accent : COLORS.p2Accent;
+    ctx.font = "bold 25px Consolas, monospace";
+    ctx.fillText(st.combo.count + " HIT COMBO", W / 2, 168);
   }
 
   // 라운드/매치 종료 표시 (레이팅 대전이면 점수 변동도 함께)
@@ -498,7 +600,7 @@ const roomFromUrl = params.get("room");
 if (roomFromUrl) {
   // 링크로 들어온 참가자: 바로 join 시도 (연결 전이면 큐에 담김)
   setStatus("방 " + roomFromUrl.toUpperCase() + " 에 참가하는 중...");
-  send({ t: "join", room: roomFromUrl });
+  send({ t: "join", room: roomFromUrl, character: characterSelect.value });
 } else {
   // 로비를 즉시 보여줘 콜드 스타트 중에도 버튼을 누를 수 있게 한다 (클릭은 큐에 담김)
   showLobby();

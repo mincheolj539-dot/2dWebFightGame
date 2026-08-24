@@ -15,11 +15,13 @@ from . import settings as s
 class Fighter:
     """한 명의 격투가. P1/P2 모두 같은 클래스를 재사용한다."""
 
-    def __init__(self, x, color, accent, facing, name):
+    def __init__(self, x, color, accent, facing, name, character=s.DEFAULT_CHARACTER):
         self.spawn_x = x
         self.color = color
         self.accent = accent
         self.name = name
+        self.character = character if character in s.CHARACTER_PROFILES else s.DEFAULT_CHARACTER
+        self.profile = s.CHARACTER_PROFILES[self.character]
         self.reset(facing)
 
     def reset(self, facing):
@@ -48,6 +50,7 @@ class Fighter:
         self.dash_vx = 0.0                # 대시 속도 (절대 방향)
         self.has_hit = False              # 이번 공격이 이미 명중했는지 (다단히트 방지)
         self.move = s.NORMAL_MOVE         # 현재/마지막 시전한 기술
+        self.meter = 0.0                  # 필살기 게이지
         self.input_buffer = []            # [(frame, token)] - 커맨드 판정용 최근 방향 입력
         self.anim_t = 0                   # 애니메이션 프레임 카운터 (걷기/대기 사이클)
         self.squash = 0.0                 # 스쿼시/스트레치 (+세로 늘림, -납작). 0으로 감쇠
@@ -124,10 +127,10 @@ class Fighter:
 
         if not self.blocking and not self.crouching and not self.is_attacking:
             if actions["left"]:
-                self.vx = -s.MOVE_SPEED
+                self.vx = -s.MOVE_SPEED * self.profile["speed"]
                 moving = True
             if actions["right"]:
-                self.vx = s.MOVE_SPEED
+                self.vx = s.MOVE_SPEED * self.profile["speed"]
                 moving = True
 
         # 공격 중(돌진 특수기)이거나 공중이면 vx 유지 (관성/lunge 보존)
@@ -136,7 +139,7 @@ class Fighter:
 
         # 점프 (웅크리는 중엔 불가) — 뛸 때 세로로 살짝 늘어남
         if actions["jump"] and self.on_ground and not self.blocking and not self.crouching:
-            self.vy = s.JUMP_VELOCITY
+            self.vy = s.JUMP_VELOCITY * self.profile["jump"]
             self.on_ground = False
             self.squash = s.JUMP_STRETCH
 
@@ -152,8 +155,8 @@ class Fighter:
     # ---- 커맨드 입력 (Command inputs) ----
     def on_keydown(self, action, frame):
         """이산 키 입력 1회를 처리. 방향은 버퍼에 기록, 공격은 기술 발동 시도."""
-        if action == "attack":
-            self._try_attack(frame)
+        if action in ("attack", "light", "heavy", "special"):
+            self._try_attack(frame, action)
             return
         # 방향 입력을 facing 기준 상대 방향 토큰으로 변환 (철권식 커맨드는 방향 상대적)
         if action == "left":
@@ -182,7 +185,7 @@ class Fighter:
             self.just_dashed = True        # 대시 먼지
             self.input_buffer.clear()     # 3연타로 재발동되지 않게
 
-    def _try_attack(self, frame):
+    def _try_attack(self, frame, attack_type="attack"):
         """상황(방어중/공중/앉기/커맨드)에 맞는 기술을 골라 시전한다.
 
         우선순위:
@@ -198,6 +201,18 @@ class Fighter:
         if self.counter_active:           # 이미 반격 자세면 재입력 무시
             return
 
+        if attack_type == "special":
+            if self.meter < s.METER_MAX:
+                return
+            move = s.SUPER_MOVE
+            self.meter = 0.0
+        elif attack_type == "light":
+            move = s.LIGHT_MOVE
+        elif attack_type == "heavy":
+            move = s.HEAVY_MOVE
+        else:
+            move = None
+
         # 반격기: 지상에서 방어(G) 홀드 중 공격(F) → 히트박스 없는 반격 자세
         # 쿨타임 중에는 발동되지 않는다.
         if self.on_ground and self.blocking:
@@ -206,9 +221,8 @@ class Fighter:
             return
 
         if not self.on_ground:
-            move = s.AIR_MOVE
-        else:
-            move = None
+            move = s.AIR_MOVE if move is None else move
+        elif move is None:
             for special in s.SPECIAL_MOVES:
                 if self._buffer_ends_with(special["seq"], frame):
                     move = special
@@ -378,6 +392,7 @@ class Fighter:
             "guard_gauge": max(0.0, self.guard_gauge / s.GUARD_MAX),  # 0..1 (HUD 바)
             "guard_locked": self.guard_locked,
             "guard_break": max(0, self.guard_break_stun),  # 가드 브레이크 스턴 남은 프레임
+            "meter": max(0.0, min(1.0, self.meter / s.METER_MAX)),
             "eye": (int(self.center_x + self.facing * 12), by + int(bh * 0.30)),
             "fist": None,
             "guard": None,

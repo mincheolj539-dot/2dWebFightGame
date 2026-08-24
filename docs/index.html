@@ -122,6 +122,18 @@
   #status { font-size: 16px; color: #aac; }
   #help { font-size: 13px; color: #778; line-height: 1.7; }
   .row { display: flex; gap: 8px; align-items: center; }
+  .selectors { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  select { font: bold 15px Consolas, monospace; padding: 9px; border-radius: 7px; background: #222; color: #fff; border: 1px solid #555; }
+  .small-btn { font-size: 14px; padding: 9px 14px; }
+  #ready-state { color: #9dd; font-size: 13px; min-height: 18px; }
+  #touch-controls { display: none; width: min(960px, 96vw); justify-content: space-between; gap: 18px; user-select: none; }
+  .touch-cluster { display: grid; grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(2, 52px); gap: 6px; }
+  .touch-cluster.actions { grid-template-columns: repeat(2, 58px); grid-template-rows: repeat(3, 52px); }
+  .touch-btn { padding: 0; font-size: 15px; opacity: .85; touch-action: none; }
+  @media (max-width: 700px) {
+    #touch-controls { display: flex; }
+    #help { font-size: 11px; text-align: center; }
+  }
 </style>
 </head>
 <body>
@@ -146,6 +158,18 @@
       <canvas id="game" width="960" height="540"></canvas>
       <div id="overlay">
         <div id="status">서버에 연결하는 중...</div>
+        <div id="selection" class="selectors">
+          <select id="character-select" aria-label="캐릭터 선택">
+            <option value="BRAWLER">BRAWLER · 강한 공격</option>
+            <option value="NINJA">NINJA · 빠른 움직임</option>
+            <option value="GUARDIAN">GUARDIAN · 안정적인 수비</option>
+          </select>
+          <select id="stage-select" aria-label="스테이지 선택">
+            <option value="NIGHT">NIGHT CITY</option>
+            <option value="SUNSET">SUNSET DOJO</option>
+            <option value="NEON">NEON GRID</option>
+          </select>
+        </div>
         <div id="lobby" style="display:none">
           <div style="display:flex; flex-direction:column; gap:14px; align-items:center">
             <div class="row">
@@ -164,15 +188,33 @@
         </div>
         <button id="btn-cancel" style="display:none">대기 취소</button>
         <div id="share" style="display:none"></div>
+        <button id="btn-ready" class="small-btn" style="display:none">준비 완료</button>
+        <div id="ready-state"></div>
         <button id="btn-copy" style="display:none">링크 복사</button>
+        <button id="btn-rematch" style="display:none">재대결</button>
+      </div>
+    </div>
+    <div id="touch-controls" aria-label="모바일 조작">
+      <div class="touch-cluster">
+        <button class="touch-btn" data-action="left">◀</button>
+        <button class="touch-btn" data-action="right">▶</button>
+        <button class="touch-btn" data-action="jump">▲</button>
+        <button class="touch-btn" data-action="down">▼</button>
+      </div>
+      <div class="touch-cluster actions">
+        <button class="touch-btn" data-action="attack">중</button>
+        <button class="touch-btn" data-action="block">방어</button>
+        <button class="touch-btn" data-action="light">약</button>
+        <button class="touch-btn" data-action="heavy">강</button>
+        <button class="touch-btn" data-action="special">필살</button>
       </div>
     </div>
     <div id="help">
-      이동 A/D·←→ · 점프 W/↑ · 웅크리기 아래(S/↓) · 공격 F/. · 방어 G// · 앞앞 = 대시 · 뒤뒤 = 백대시<br>
+      이동 A/D·←→ · 점프 W/↑ · 웅크리기 아래(S/↓) · 중공격 F/. · 약공격 J · 강공격 K · 방어 G// · 필살 L<br>
       <b>한 컴퓨터 2인 대전</b>: 1P = WASD + 공격 F · 방어 G　/　2P = 방향키 + 공격 넘패드1 · 방어 넘패드2<br>
       아래+공격 = 로우킥(앉아 막아야 방어) · 공중+공격 = 점프킥(서서 막아야 방어) · 아래+방어 = 앉아 막기 · ↓앞+공격 = 어퍼컷<br>
       가드 게이지: 계속 막으면 게이지가 닳아 가드가 풀림 · 가드 중 어퍼컷 맞으면 <b>가드브레이크(1초 스턴)</b><br>
-      공격+방어 동시(F+G) = 반격기(0.5초 내 맞으면 1.5배 반사 · 헛치면 경직+쿨타임) · R = 재시작<br>
+      공격+방어 동시(F+G) = 반격기 · 보라 게이지가 차면 L로 필살기 · R = 재대결/재시작<br>
       <b>레이팅 대전</b>: 닉네임 입력 후 버튼 → 비슷한 점수의 상대와 자동 매칭 · 승패로 점수 변동(시작 1000)
     </div>
     <div style="font-size:12px;color:#667;margin-top:4px">
@@ -194,7 +236,7 @@
 
 </div>
 <!-- ?v= 는 캐시 무효화용 버전. game.js/config.js 를 수정하면 숫자를 올린다. -->
-<script src="config.js?v=15"></script>
-<script src="game.js?v=15"></script>
+<script src="config.js?v=16"></script>
+<script src="game.js?v=16"></script>
 </body>
 </html>

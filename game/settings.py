@@ -12,6 +12,15 @@ GROUND_Y = HEIGHT - 80          # 바닥 y좌표 (fighters stand on this line)
 JUMP_VELOCITY = -16
 MOVE_SPEED = 5
 
+# 선택 가능한 캐릭터 프리셋. 서버가 적용하므로 외형뿐 아니라 실제 전투 성능에도 반영된다.
+CHARACTER_PROFILES = {
+    "BRAWLER": {"label": "BRAWLER", "speed": 1.0, "damage": 1.12, "jump": 1.0},
+    "NINJA": {"label": "NINJA", "speed": 1.22, "damage": 0.92, "jump": 1.08},
+    "GUARDIAN": {"label": "GUARDIAN", "speed": 0.84, "damage": 0.98, "jump": 0.92},
+}
+DEFAULT_CHARACTER = "BRAWLER"
+STAGES = ("NIGHT", "SUNSET", "NEON")
+
 # 파이터 규격 (Fighter dimensions)
 FIGHTER_W = 60
 FIGHTER_H = 110
@@ -59,6 +68,22 @@ NORMAL_MOVE = {
     "lunge": 0,                 # 시전 시 전진 속도
     "launch": 0,                # 명중 시 상대를 띄우는 수직 속도 (음수 = 위)
     "stun": HIT_STUN,           # 명중 시 피격자 경직 프레임
+}
+
+LIGHT_MOVE = {
+    "name": "LIGHT PUNCH", "seq": (), "level": "mid", "damage": 6,
+    "range": 58, "duration": 9, "active": (3, 6), "cooldown": 9,
+    "lunge": 0, "launch": 0, "stun": 9,
+}
+HEAVY_MOVE = {
+    "name": "HEAVY SMASH", "seq": (), "level": "mid", "damage": 18,
+    "range": 78, "duration": 22, "active": (8, 14), "cooldown": 30,
+    "lunge": 2, "launch": -4, "stun": 22,
+}
+SUPER_MOVE = {
+    "name": "METEOR BREAK", "seq": (), "level": "overhead", "damage": 30,
+    "range": 100, "duration": 30, "active": (8, 20), "cooldown": 45,
+    "lunge": 4, "launch": -16, "stun": 34, "guard_break": True,
 }
 
 # 앉아 공격 (아래 홀드 + 공격): 로우킥 — 앉아 막아야 막힌다
@@ -127,6 +152,11 @@ COUNTER_COOLDOWN = 75           # 창 종료 후 재사용까지 추가 대기 (
 COUNTER_MULT = 1.5             # 되돌려주는 데미지 배율
 COUNTER_STUN = 24               # 반격당한 공격자 경직 프레임
 COUNTER_FAIL_STUN = 36          # 반격 실패(창 만료·헛방) 시 자신이 받는 경직 (0.6초)
+
+# 필살기 게이지
+METER_MAX = 100
+METER_ON_HIT = 22
+METER_ON_BLOCK = 9
 
 # 히트 이펙트 (Hit feedback)
 SHAKE_NORMAL = 7                # 일반 히트 화면 흔들림 프레임
